@@ -1,0 +1,101 @@
+# rules/constraints.yaml -- V4 constraint-consistency rules (architecture.md
+# §7.5). Every `id` here must have exactly one registered Python predicate
+# in verify/constraint_rules.py::_PREDICATES -- a mismatch either way is a
+# load-time error, not a silent skip (see RulesEngine._load_and_validate).
+version: 1
+rules:
+  - id: R-001
+    description: "EXTREME risk_level must not accompany a BUY decision"
+    action: block_force_repair
+    severity: BREACH
+    params: {}
+
+  - id: R-002
+    description: >-
+      A BUY decision that breaches the mandate's single-name concentration
+      cap must include a hedge or explicit position-sizing qualifier
+    action: block
+    severity: BREACH
+    params:
+      mandate_key: max_concentration_pct
+      metric_id_pattern: '^top_\d+_weight$'
+
+  - id: R-003
+    description: >-
+      confidence > 0.80 requires no DEGRADED tool calls in the ledger and
+      no unhedged forward_looking claim
+    action: cap_confidence
+    severity: WARN
+    params:
+      confidence_threshold: 0.80
+
+  - id: R-004
+    description: >-
+      Portfolio VaR over the mandate's VaR limit requires a risk-reducing
+      decision (REDUCE, HEDGE, or NO_ACTION)
+    action: block
+    severity: BREACH
+    params:
+      mandate_key: max_var_pct
+      metric_id_pattern: '^portfolio_var_'
+
+  - id: R-005
+    description: >-
+      NOT IMPLEMENTED. Theme weight over the mandate's theme cap must appear
+      in summary and constraints_checked. Needs a theme taxonomy and
+      get_theme_exposure, neither of which exists (M3 deferred this; still
+      absent as of M4). Registered as an always-NOT_APPLICABLE stub so the
+      rule ID is documented and testable rather than silently missing.
+    action: not_applicable
+    severity: WARN
+    params: {}
+
+  - id: R-006
+    description: >-
+      Any causal claim must have at least one T1/T2-tier evidence item,
+      else it should be downgraded to hedged
+    action: downgrade_claim
+    severity: WARN
+    params:
+      required_tiers: [T1, T2]
+
+  - id: R-007
+    description: >-
+      decision != NO_ACTION requires at least one cited metric computed
+      within 3 trading days of its own as_of date
+    action: cap_confidence
+    severity: WARN
+    params:
+      max_staleness_trading_days: 3
+
+  - id: R-008
+    description: "summary must not contain prohibited certainty language"
+    action: block_force_repair
+    severity: BREACH
+    params:
+      prohibited_terms:
+        - guarantee
+        - guaranteed
+        - will definitely
+        - risk-free
+        - risk free
+        - certain to
+        - no risk
+        - cannot lose
+
+  - id: R-009
+    description: >-
+      NOT IMPLEMENTED. A single-name SELL/BUY should have
+      simulate_trade_impact present in the ledger. simulate_trade_impact is
+      an M7 portfolio-optimizer tool that does not exist yet. Registered as
+      an always-NOT_APPLICABLE stub, same rationale as R-005.
+    action: not_applicable
+    severity: WARN
+    params: {}
+
+  - id: R-010
+    description: "confidence < 0.40 must force decision == INSUFFICIENT_EVIDENCE"
+    action: rewrite_decision
+    severity: BREACH
+    params:
+      confidence_threshold: 0.40

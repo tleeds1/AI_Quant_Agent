@@ -1,0 +1,112 @@
+[importlinter]
+root_package = quantagent
+
+[importlinter:contract:high-level-layering]
+name = api -> agent -> tools -> rag -> data -> quant -> contracts
+type = layers
+layers =
+    quantagent.api
+    quantagent.agent
+    quantagent.tools
+    quantagent.rag
+    quantagent.data
+    quantagent.quant
+    quantagent.contracts
+
+[importlinter:contract:contracts-purity]
+name = contracts/ imports nothing internal
+type = forbidden
+source_modules = quantagent.contracts
+forbidden_modules =
+    quantagent.agent
+    quantagent.api
+    quantagent.tools
+    quantagent.quant
+    quantagent.data
+    quantagent.rag
+    quantagent.verify
+    quantagent.guardrails
+    quantagent.llm
+    quantagent.obs
+
+[importlinter:contract:quant-purity]
+name = quant/ imports only contracts + numpy/pandas/scipy
+type = forbidden
+source_modules = quantagent.quant
+forbidden_modules =
+    quantagent.data
+    quantagent.llm
+    quantagent.tools
+    quantagent.agent
+    quantagent.api
+    quantagent.rag
+    quantagent.verify
+    quantagent.guardrails
+    quantagent.obs
+
+[importlinter:contract:data-purity]
+name = data/ owns I/O; no quant, rag, tools, agent, api
+type = forbidden
+source_modules = quantagent.data
+forbidden_modules =
+    quantagent.quant
+    quantagent.rag
+    quantagent.tools
+    quantagent.agent
+    quantagent.api
+    quantagent.verify
+    quantagent.guardrails
+    quantagent.llm
+    quantagent.obs
+
+[importlinter:contract:rag-scope]
+name = rag/ imports only contracts + data
+type = forbidden
+source_modules = quantagent.rag
+forbidden_modules =
+    quantagent.quant
+    quantagent.tools
+    quantagent.agent
+    quantagent.api
+    quantagent.verify
+    quantagent.guardrails
+    quantagent.llm
+    quantagent.obs
+
+[importlinter:contract:tools-no-agent]
+name = tools/ must not import agent/ or api/
+type = forbidden
+source_modules = quantagent.tools
+forbidden_modules =
+    quantagent.agent
+    quantagent.api
+
+[importlinter:contract:verify-cross-cutting]
+name = verify/ imports only contracts + llm (critic only)
+type = forbidden
+source_modules = quantagent.verify
+forbidden_modules =
+    quantagent.agent
+    quantagent.api
+    quantagent.tools
+    quantagent.quant
+    quantagent.data
+    quantagent.rag
+    quantagent.guardrails
+    quantagent.obs
+
+[importlinter:contract:guardrails-obs-cross-cutting]
+name = guardrails/ and obs/ import only contracts
+type = forbidden
+source_modules =
+    quantagent.guardrails
+    quantagent.obs
+forbidden_modules =
+    quantagent.agent
+    quantagent.api
+    quantagent.tools
+    quantagent.quant
+    quantagent.data
+    quantagent.rag
+    quantagent.llm
+    quantagent.verify

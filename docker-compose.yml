@@ -1,0 +1,31 @@
+# Host ports are non-standard (55432/56379, not 5432/6379) because this dev machine already runs
+# other Postgres/Redis containers on the standard ports. Container-internal ports are untouched;
+# only the host-side mapping changed. Adjust back to 5432/6379 on a machine without that conflict.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: quant
+      POSTGRES_PASSWORD: quant
+      POSTGRES_DB: quantagent
+    ports: ["55432:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quant -d quantagent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["56379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

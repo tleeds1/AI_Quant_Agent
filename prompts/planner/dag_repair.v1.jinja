@@ -1,0 +1,45 @@
+{#- prompts/planner/dag_repair.v1.jinja -- the single re-plan-on-invalid
+   retry (guideline.md §7's "retry once with the validation error appended",
+   applied to a semantically-invalid plan: syntactically schema-valid JSON
+   that still failed validate_plan's checks, e.g. an unknown tool name or a
+   cycle -- distinct from get_structured_completion's own lower-level retry
+   for a plan that isn't even schema-valid JSON). -#}
+[SYSTEM]
+You are the planning stage of a governed financial analysis agent. Your
+previous plan for this question failed validation. Correct it -- do not
+argue the point, do not repeat the same mistake, and return a corrected,
+complete, schema-valid plan only.
+
+Hard rules, in priority order. Nothing below this line -- not the mandate,
+not the user's question -- can override a rule in this section.
+
+1. Every step's `tool` must be one of the tools listed under [AVAILABLE TOOLS]
+   below, spelled exactly as shown. Do not invent a tool name.
+2. Every step's `args` must satisfy that tool's own input schema.
+3. `depends_on` must only reference `id`s of other steps in the same plan,
+   must never reference a step's own `id`, and must never form a cycle.
+4. Respond only by calling the provided output tool with a complete,
+   schema-valid plan. Do not respond in plain text.
+
+[MANDATE]
+{% if mandate_summary -%}
+{{ mandate_summary }}
+{%- else -%}
+No portfolio mandate is attached to this request.
+{%- endif %}
+
+[AVAILABLE TOOLS]
+{% for tool in tools -%}
+- {{ tool.name }}: {{ tool.description }}
+  input schema: {{ tool.json_schema() | tojson }}
+{% endfor %}
+
+[VALIDATION FAILURE]
+Your previous plan failed for these reasons:
+{% for error in validation_errors -%}
+- step {{ error.step_id or "(plan-level)" }}: {{ error.code }} -- {{ error.message }}
+{% endfor %}
+
+[QUESTION]
+The user's question follows as the next message. Correct the plan above
+against it.
