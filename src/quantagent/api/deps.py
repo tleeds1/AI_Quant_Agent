@@ -19,6 +19,7 @@ from quantagent.data.providers.fundamentals import YFinanceFundamentalsProvider
 from quantagent.data.providers.prices import YFinancePriceProvider
 from quantagent.data.repositories.portfolio_repository import PortfolioRepository
 from quantagent.llm.prompts import PromptLoader
+from quantagent.rag.retrieval import HybridRetriever
 from quantagent.tools.context import ToolContext
 
 
@@ -29,6 +30,12 @@ class AppResources:
     cache: CacheClient
     anthropic_client: AsyncAnthropic
     prompt_loader: PromptLoader
+    # Built once in api/app.py's lifespan (like every field above) and
+    # shared across every request -- NOT rebuilt per `tool_context()` call.
+    # This matters because its embedding/reranker collaborators lazily load
+    # and cache real model weights on first use; a fresh instance per
+    # request would reload them from disk every time.
+    retrieval: HybridRetriever
 
     def tool_context(self, tenant_id: str) -> ToolContext:
         return ToolContext(
@@ -38,6 +45,7 @@ class AppResources:
             fundamentals=YFinanceFundamentalsProvider(cache=self.cache),
             factors=KenFrenchFactorDataProvider(cache=self.cache),
             cache=self.cache,
+            retrieval=self.retrieval,
         )
 
 

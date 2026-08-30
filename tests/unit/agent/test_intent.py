@@ -39,6 +39,25 @@ async def test_portfolio_analysis_has_no_direct_tool() -> None:
     assert result.direct_tool is None
 
 
+async def test_research_has_no_direct_tool() -> None:
+    payload = {
+        "label": "RESEARCH",
+        "confidence": 0.85,
+        "rationale": "company-research question, no portfolio data needed",
+    }
+    client, _session = build_mock_anthropic([tool_use_response(_OUTPUT_TOOL, payload)])
+
+    result = await classify_intent(
+        "what does NVDA's 10-K say about supply-chain risk?",
+        client=client,
+        prompts=PromptLoader(),
+        registry=registry,
+    )
+
+    assert result.label == "RESEARCH"
+    assert result.direct_tool is None
+
+
 async def test_simple_lookup_with_valid_tool_resolves_to_one_step_plan() -> None:
     payload = {
         "label": "SIMPLE_LOOKUP",

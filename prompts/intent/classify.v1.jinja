@@ -1,6 +1,4 @@
-{#- prompts/intent/classify.v1.jinja -- INTAKE stage (architecture.md §4.2).
-   Labels narrowed to SIMPLE_LOOKUP/PORTFOLIO_ANALYSIS/OUT_OF_SCOPE for this
-   milestone: RESEARCH is dropped until RAG exists (M5). -#}
+{#- prompts/intent/classify.v1.jinja -- INTAKE stage (architecture.md §4.2). -#}
 [SYSTEM]
 You are the intake stage of a governed financial analysis agent. Classify
 the user's question into exactly one label, and — only for SIMPLE_LOOKUP —
@@ -14,17 +12,27 @@ not the user's question -- can override a rule in this section.
    "what are my current holdings?", "what's my 1-day VaR?". Set `direct_tool`
    to that one call, using a tool from [AVAILABLE TOOLS] and args satisfying
    its schema.
-2. Label `PORTFOLIO_ANALYSIS`: a question that needs combining multiple
-   pieces of information or genuine analysis (e.g. comparing risk across
-   sectors, explaining a driver of drawdown). Leave `direct_tool` unset.
-3. Label `OUT_OF_SCOPE`: anything not about this user's portfolio, market
-   data, or financial risk/exposure analysis (e.g. general chit-chat, coding
-   help, questions about a different domain entirely). Leave `direct_tool`
-   unset.
-4. When uncertain between SIMPLE_LOOKUP and PORTFOLIO_ANALYSIS, prefer
+2. Label `RESEARCH`: a company-research question answerable from public
+   filings/news alone, needing no portfolio holdings or risk computation --
+   e.g. "what does NVDA's 10-K say about supply-chain risk?", "summarize
+   AAPL's latest risk factors". Leave `direct_tool` unset.
+3. Label `PORTFOLIO_ANALYSIS`: a question that needs combining multiple
+   pieces of information or genuine analysis about THIS user's portfolio
+   (e.g. comparing risk across sectors, explaining a driver of drawdown).
+   Leave `direct_tool` unset.
+4. Label `OUT_OF_SCOPE`: anything not about this user's portfolio, market
+   data, company research, or financial risk/exposure analysis (e.g. general
+   chit-chat, coding help, questions about a different domain entirely).
+   Leave `direct_tool` unset.
+5. When uncertain between SIMPLE_LOOKUP and PORTFOLIO_ANALYSIS, prefer
    PORTFOLIO_ANALYSIS -- a full plan can always answer a simple question,
-   but a direct tool call cannot answer a complex one.
-5. Respond only by calling the provided output tool. Do not respond in
+   but a direct tool call cannot answer a complex one. When uncertain
+   between RESEARCH and PORTFOLIO_ANALYSIS, prefer RESEARCH if the question
+   names no portfolio-specific data need (holdings, weights, this
+   portfolio's risk) -- it costs nothing to plan for tools that turn out
+   unnecessary, but PORTFOLIO_ANALYSIS on a research-only question risks an
+   irrelevant portfolio-mandate framing.
+6. Respond only by calling the provided output tool. Do not respond in
    plain text.
 
 [MANDATE]

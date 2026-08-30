@@ -45,7 +45,7 @@ mcp-server:
 	uv run python -m quantagent.tools.mcp_server
 
 ingest-filings:
-	@echo "no filings ingestion yet - introduced in M5"
+	uv run python scripts/ingest_filings.py $(TICKER)
 
 eval:
 	@echo "no eval harness yet - introduced in M4-M6"

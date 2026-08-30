@@ -33,6 +33,9 @@ async def session_factory(
     yield async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as conn:
         await conn.execute(
-            text("TRUNCATE TABLE portfolios, holdings, transactions RESTART IDENTITY CASCADE")
+            text(
+                "TRUNCATE TABLE portfolios, holdings, transactions, filings, filing_chunks "
+                "RESTART IDENTITY CASCADE"
+            )
         )
     await engine.dispose()

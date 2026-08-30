@@ -10,6 +10,7 @@ from quantagent.data.providers.factors import FactorDataProvider
 from quantagent.data.providers.fundamentals import FundamentalsProvider
 from quantagent.data.providers.prices import PriceProvider
 from quantagent.data.repositories.portfolio_repository import PortfolioRepository
+from quantagent.rag.retrieval import HybridRetriever
 
 
 class ToolContext:
@@ -37,6 +38,7 @@ class ToolContext:
         fundamentals: FundamentalsProvider,
         factors: FactorDataProvider,
         cache: CacheClient,
+        retrieval: HybridRetriever | None = None,
         tool_name: str | None = None,
         tool_call_id: str | None = None,
         inputs_hash: str | None = None,
@@ -47,6 +49,11 @@ class ToolContext:
         self.fundamentals = fundamentals
         self.factors = factors
         self.cache = cache
+        # Optional, unlike every other resource above: RAG isn't wired in
+        # every deployment/test the way prices/fundamentals are.
+        # `tools/research.py`'s adapters degrade gracefully to an empty
+        # result with a documented limitation when this is None.
+        self.retrieval = retrieval
         self._tool_name = tool_name
         self._tool_call_id = tool_call_id
         self._inputs_hash = inputs_hash
@@ -64,6 +71,7 @@ class ToolContext:
             fundamentals=self.fundamentals,
             factors=self.factors,
             cache=self.cache,
+            retrieval=self.retrieval,
             tool_name=tool_name,
             tool_call_id=tool_call_id or f"tc_{uuid4().hex[:10]}",
             inputs_hash=inputs_hash,

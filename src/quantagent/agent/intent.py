@@ -1,10 +1,19 @@
 """agent/intent.py -- the INTAKE stage (architecture.md §4.2).
 
-Classifies a question into one of three labels (narrowed from architecture's
-four -- `RESEARCH` is deliberately dropped until RAG exists, M5) and, for
-`SIMPLE_LOOKUP`, resolves it to a one-step `Plan` reusing the exact same
-`validate_plan` the planner uses -- one validation code path for both the
-DAG and this degenerate one-step case, not a second bespoke check.
+Classifies a question into one of four labels and, for `SIMPLE_LOOKUP`,
+resolves it to a one-step `Plan` reusing the exact same `validate_plan` the
+planner uses -- one validation code path for both the DAG and this
+degenerate one-step case, not a second bespoke check.
+
+`RESEARCH` (added M5, RAG) shares `PORTFOLIO_ANALYSIS`'s full DAG-planning
+execution path in `agent/loop.py` -- `create_plan` already lists every
+registered tool regardless of intent label, and mandate/portfolio loading
+is already conditional on `portfolio_id is None`, independent of intent.
+The label exists to steer the intent-classification prompt (a
+company-research question that needs no portfolio data should not be
+answered "OUT_OF_SCOPE") and for observability, not to select a different
+code path -- building a second, lighter-weight execution path for it would
+duplicate `create_plan`/`validate_plan` for no measured benefit (YAGNI).
 """
 
 from __future__ import annotations
@@ -29,7 +38,7 @@ PROMPT_NAME = "classify"
 PROMPT_VERSION = 1
 INTENT_TEMPERATURE = 0.0  # guideline.md §7: temperature=0 for classification
 
-IntentLabel = Literal["SIMPLE_LOOKUP", "PORTFOLIO_ANALYSIS", "OUT_OF_SCOPE"]
+IntentLabel = Literal["SIMPLE_LOOKUP", "PORTFOLIO_ANALYSIS", "RESEARCH", "OUT_OF_SCOPE"]
 
 
 class _DirectToolSelection(BaseModel):

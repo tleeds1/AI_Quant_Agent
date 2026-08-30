@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from quantagent.contracts.evidence import SourceTier
 from quantagent.contracts.metrics import MetricUnit, MetricValue
 from quantagent.contracts.provenance import Provenance
 
@@ -373,4 +374,106 @@ class ReportArtifact(BaseModel):
     generated_at: datetime
     sections: list[ReportSection]
     warnings: list[str]
+    provenance: Provenance
+
+
+# ---------------------------------------------------------------- research (RAG) --
+
+# Shared name constants: `tools/research.py`'s `@registry.tool(name=...)`
+# registration and `agent/document_index.py`'s ledger scan must agree on the
+# exact same string. Every other tool in this codebase just repeats its own
+# literal name once (no shared constant) -- these two are the first tool
+# names two independent modules both need to match exactly, which is what
+# earns them a named constant here instead (guideline.md §4.3: no magic
+# strings in logic).
+RETRIEVE_COMPANY_FILINGS = "retrieve_company_filings"
+RETRIEVE_FILING_SECTION = "retrieve_filing_section"
+SEARCH_RECENT_NEWS = "search_recent_news"
+GET_EARNINGS_TRANSCRIPT_SNIPPETS = "get_earnings_transcript_snippets"
+
+
+class RetrievedFilingChunk(BaseModel):
+    """A single retrieved-and-reranked filing passage, citable as `Evidence`
+    (architecture.md §4.7). `excerpt`/`char_span` are the ONLY chunk text
+    that ever reaches the synthesiser -- deliberately excludes the full
+    underlying chunk text (`rag.retrieval.RetrievedChunk.text`), so an
+    injected instruction sitting outside the excerpt window is never sent
+    to the model at all (a security benefit beyond the injection classifier
+    alone).
+    """
+
+    chunk_id: str
+    ticker: str
+    cik: str
+    form_type: str
+    filed_at: date
+    item: str
+    section_path: str
+    excerpt: str = Field(max_length=300)
+    char_span: tuple[int, int]
+    source_url: str
+    source_tier: SourceTier
+    retrieval_score: float
+
+
+class RetrieveCompanyFilingsInput(BaseModel):
+    ticker: str
+    form_types: list[str] = Field(default_factory=lambda: ["10-K", "10-Q", "8-K"])
+    since: date | None = None
+    query: str = Field(min_length=1, description="The research question driving retrieval")
+
+
+class RetrieveCompanyFilingsOutput(BaseModel):
+    ticker: str
+    chunks: list[RetrievedFilingChunk]
+    provenance: Provenance
+
+
+class RetrieveFilingSectionInput(BaseModel):
+    ticker: str
+    form: str
+    section: str  # e.g. "item_1a", "item_7"
+    query: str = Field(min_length=1, description="The research question driving retrieval")
+
+
+class RetrieveFilingSectionOutput(BaseModel):
+    ticker: str
+    form: str
+    section: str
+    chunks: list[RetrievedFilingChunk]
+    provenance: Provenance
+
+
+class SearchRecentNewsInput(BaseModel):
+    tickers: list[str]
+    days: int = Field(14, ge=1, le=365)
+    min_source_tier: SourceTier | None = None
+
+
+class SearchRecentNewsOutput(BaseModel):
+    """No live news data source is configured in this milestone (see
+    `tools/research.py`'s module docstring) -- `chunks` is always empty,
+    with the limitation recorded in `provenance.warnings`, mirroring how
+    `verify/constraint_rules.py` registers R-005/R-009 as real,
+    always-`NOT_APPLICABLE` rules rather than omitting them: the planner's
+    tool catalogue and any DAG referencing this tool by name resolve
+    against a real, known tool rather than failing plan validation.
+    """
+
+    tickers: list[str]
+    chunks: list[RetrievedFilingChunk] = Field(default_factory=list)
+    provenance: Provenance
+
+
+class GetEarningsTranscriptSnippetsInput(BaseModel):
+    ticker: str
+    quarters: list[str]
+    query: str = Field(min_length=1)
+
+
+class GetEarningsTranscriptSnippetsOutput(BaseModel):
+    """Permanently degraded stub this milestone -- see `SearchRecentNewsOutput`."""
+
+    ticker: str
+    chunks: list[RetrievedFilingChunk] = Field(default_factory=list)
     provenance: Provenance

@@ -3,6 +3,7 @@ from quantagent.tools import (
     exposure,
     market,
     portfolio,
+    research,
     risk,
     utility,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "market",
     "portfolio",
     "registry",
+    "research",
     "risk",
     "utility",
 ]

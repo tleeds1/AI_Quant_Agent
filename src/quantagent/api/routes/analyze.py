@@ -73,12 +73,15 @@ async def analyze(
     """Streams `plan|tool_start|tool_done|draft|verdict|final` SSE events.
 
     `X-Tenant-Id` is a stopgap: architecture.md §4.1 assigns auth/tenancy to
-    the API/Session layer, but that middleware doesn't exist until M5's
-    guardrails. This header is NOT cryptographically verified yet -- treat
-    it as trusted-caller-only until then. Optional-then-manually-checked
-    (rather than `Header(...)`'s required-and-422) so a missing header
-    surfaces as a deliberate `400`, matching this endpoint's own contract
-    rather than FastAPI's generic validation-error shape.
+    the API/Session layer, but that middleware still doesn't exist -- M5's
+    guardrails (content-policy checks: scope/PII/injection/prohibited
+    content/disclosures) are a separate concern from request authentication
+    and don't touch this. This header is NOT cryptographically verified yet
+    -- treat it as trusted-caller-only until real auth middleware is built.
+    Optional-then-manually-checked (rather than `Header(...)`'s
+    required-and-422) so a missing header surfaces as a deliberate `400`,
+    matching this endpoint's own contract rather than FastAPI's generic
+    validation-error shape.
     """
     if x_tenant_id is None or not x_tenant_id.strip():
         raise HTTPException(status_code=400, detail="X-Tenant-Id header is required")

@@ -27,10 +27,17 @@ import quantagent.tools  # noqa: F401 -- import side effect: populates the regis
 from quantagent.config import settings
 from quantagent.contracts.errors import ToolValidationError
 from quantagent.data.cache import CacheClient
+from quantagent.data.providers.embeddings import (
+    DEFAULT_EMBEDDING_MODEL,
+    SentenceTransformerEmbeddingProvider,
+)
 from quantagent.data.providers.factors import KenFrenchFactorDataProvider
 from quantagent.data.providers.fundamentals import YFinanceFundamentalsProvider
 from quantagent.data.providers.prices import YFinancePriceProvider
+from quantagent.data.providers.reranker import SentenceTransformersRerankerProvider
+from quantagent.data.repositories.filings_repository import FilingsRepository
 from quantagent.data.repositories.portfolio_repository import PortfolioRepository
+from quantagent.rag.retrieval import HybridRetriever
 from quantagent.tools.context import ToolContext
 from quantagent.tools.registry import registry
 
@@ -45,6 +52,12 @@ def build_tool_context(*, tenant_id: str = DEFAULT_TENANT_ID) -> ToolContext:
     engine = create_async_engine(settings.database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     cache = CacheClient.from_settings()
+    retrieval = HybridRetriever(
+        repository=FilingsRepository(session_factory),
+        embeddings=SentenceTransformerEmbeddingProvider(),
+        reranker=SentenceTransformersRerankerProvider(),
+        embedding_model_name=DEFAULT_EMBEDDING_MODEL,
+    )
     return ToolContext(
         tenant_id=tenant_id,
         portfolios=PortfolioRepository(session_factory),
@@ -52,6 +65,7 @@ def build_tool_context(*, tenant_id: str = DEFAULT_TENANT_ID) -> ToolContext:
         fundamentals=YFinanceFundamentalsProvider(cache=cache),
         factors=KenFrenchFactorDataProvider(cache=cache),
         cache=cache,
+        retrieval=retrieval,
     )
 
 

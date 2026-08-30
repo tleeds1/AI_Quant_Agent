@@ -1,0 +1,129 @@
+# rules/policy.yaml -- guardrail pattern data (architecture.md §8, §11.3;
+# guideline.md §9). Every pattern group referenced by guardrails/policy.py's
+# accessors must exist here -- a missing/malformed entry is a load-time
+# error (guardrails/policy.py::PolicyConfigError), never a silent skip.
+version: 1
+
+prohibited_request_patterns:
+  - id: insider_information
+    description: "Requests to source or act on material non-public information"
+    patterns:
+      - '\binsider (information|tip|knowledge)\b'
+      - '\bnon-?public information\b'
+      - '\bmnpi\b'
+
+  - id: market_manipulation
+    description: "Requests to coordinate trading activity intended to move a price"
+    patterns:
+      - '\bpump and dump\b'
+      - '\bpump (it|the stock)\b'
+      - '\bcoordinat(e|ed) buying\b'
+      - '\bspoof(ing)? (orders?|trades?)\b'
+
+  - id: guaranteed_returns_request
+    description: '"Guarantee me returns" framing -- no legitimate analysis can promise this'
+    patterns:
+      - '\bguarantee(d)? (me )?returns?\b'
+      - '\brisk-?free (return|profit)\b'
+      - '\bsure-?fire (profit|trade)\b'
+
+# Third-party full-name detection is NOT implemented here: reliable name
+# detection needs NER, an ML dependency forbidden in guardrails/ (every
+# check must be deterministic pattern-matching -- .importlinter's
+# guardrails-obs-cross-cutting contract, guideline.md §9). Documented
+# limitation, not a silent gap.
+pii_patterns:
+  - id: ssn_us
+    pattern: '\b\d{3}-\d{2}-\d{4}\b'
+    replacement: "[REDACTED_SSN]"
+  - id: account_number
+    pattern: '\b(?:acct|account)\s*#?\s*\d{6,17}\b'
+    replacement: "[REDACTED_ACCOUNT]"
+  - id: credit_card
+    pattern: '\b(?:\d[ -]?){13,19}\b'
+    replacement: "[REDACTED_CARD]"
+  - id: email
+    pattern: '\b[\w.+-]+@[\w-]+\.[\w.-]+\b'
+    replacement: "[REDACTED_EMAIL]"
+  - id: phone_us
+    pattern: '\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
+    replacement: "[REDACTED_PHONE]"
+
+injection_patterns:
+  - id: instruction_override
+    description: "Attempts to override or replace the system prompt's instructions"
+    patterns:
+      - '\bignore (all|any|the)? ?(previous|prior|above) instructions\b'
+      - '\bdisregard (the )?(system|above) (prompt|instructions)\b'
+      - '\byou are now\b'
+      - '\bnew system prompt\b'
+      - '\bdan mode\b'
+  - id: exfiltration_request
+    description: "Attempts to make the model reveal its own instructions"
+    patterns:
+      - '\breveal your (system prompt|instructions)\b'
+      - '\bprint (out )?your (system )?prompt\b'
+      - '\brepeat (the words|everything) above\b'
+  - id: delimiter_forgery
+    description: >-
+      Attempts to forge the instruction-hierarchy markers architecture.md
+      §6.2 uses ([SYSTEM]/[MANDATE]/<untrusted_data>)
+    patterns:
+      - '</?untrusted_data'
+      - '\[SYSTEM\]'
+      - '\[MANDATE\]'
+
+prohibited_language_patterns:
+  - '\bguarantee(d)?\b'
+  - '\bwill definitely\b'
+  - '\brisk-?free\b'
+  - "\\bcan.?t lose\\b"
+  - '\bcertain to\b'
+
+advice_framing_patterns:
+  - '\byou should (buy|sell|invest)\b'
+  - '\bthis is suitable for (you|your account)\b'
+  - '\bi (personally )?recommend you\b'
+
+# Best-effort only: guardrails/ cannot read the live system-prompt text (it
+# may only import contracts/, per .importlinter), so this cannot be a
+# literal diff against prompts/. Key-shaped patterns catch the highest-value
+# case (a leaked credential); prompt_marker_phrases is left empty pending
+# prompts/ owners naming distinctive fixed phrases worth matching on.
+leakage_patterns:
+  - 'sk-ant-[A-Za-z0-9-]{20,}'
+  - 'sk-[A-Za-z0-9]{20,}'
+  - 'AKIA[0-9A-Z]{16}'
+  - 'Bearer [A-Za-z0-9._-]{20,}'
+prompt_marker_phrases: []
+
+disclosure_templates:
+  not_investment_advice: "This analysis is for informational purposes only and is not investment advice."
+  data_as_of: "Market data and other figures reflect the as-of dates recorded on each metric above."
+  model_limitations: "This analysis has known limitations; see the limitations listed above."
+  simulated_scenario: "Any hypothetical or simulated scenario results are not a projection of actual performance."
+  no_conflicts: "No conflicts of interest are declared for this analysis."
+
+refusal_templates:
+  out_of_scope: >-
+    I can't help with that -- it's outside financial portfolio analysis. I can analyze
+    your portfolio's risk, exposure, and concentration instead.
+  rate_limit_exceeded: >-
+    I can't process another request until your request limit resets for this period. I
+    can answer a narrower question instead, or you can try again shortly.
+  jurisdiction_blocked: >-
+    I can't offer this feature for your account's configured jurisdiction. I can still
+    quantify portfolio risk and exposure metrics instead.
+  injection_detected: >-
+    I can't act on this request -- it looks like it contains embedded instructions rather
+    than a question. Ask your portfolio-risk question directly instead.
+  prohibited_request:
+    insider_information: >-
+      I can't help source or act on non-public material information. I can analyze
+      publicly available filings, prices, and news for the same tickers instead.
+    market_manipulation: >-
+      I can't help coordinate trading activity intended to move a price. I can quantify
+      a stock's or portfolio's existing risk and exposure instead.
+    guaranteed_returns_request: >-
+      I can't promise or guarantee investment returns -- no legitimate analysis can. I
+      can quantify historical volatility, VaR, and downside scenarios instead.

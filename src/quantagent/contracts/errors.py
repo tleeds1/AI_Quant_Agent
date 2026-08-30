@@ -81,3 +81,13 @@ class ProhibitedRequestError(GuardrailError):
 
 class InjectionDetectedError(GuardrailError):
     """The injection classifier flagged user input or a retrieved chunk (architecture.md §11.3)."""
+
+
+class PolicyViolationError(GuardrailError):
+    """An outbound answer failed prohibited-language, advice-framing,
+    PII-egress or leakage screening (architecture.md §8.2). One leaf covers
+    all four categories: the existing hierarchy isn't 1:1 exhaustive per
+    inbound category either (rate-limit/jurisdiction share GuardrailError
+    directly), so four near-identical outbound leaves would be
+    over-engineering relative to how the inbound side was built.
+    """

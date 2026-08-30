@@ -26,12 +26,13 @@ dependencies = [
     "statsmodels>=0.14",
     "cvxpy>=1.5",
     "yfinance>=0.2",
-    "sec-edgar-downloader>=5.0",
     "structlog>=24.4",
     "opentelemetry-sdk>=1.27",
     "jinja2>=3.1",
     "pyyaml>=6.0",
     "mcp>=2.1.1",
+    "sentence-transformers>=3.0",
+    "beautifulsoup4>=4.12",
 ]
 
 [project.optional-dependencies]
@@ -98,6 +99,7 @@ module = [
     "quantagent.config",
     "quantagent.agent.*",
     "quantagent.llm.*",
+    "quantagent.rag.*",
 ]
 strict = true
 
@@ -105,9 +107,9 @@ strict = true
 module = [
     "yfinance.*",
     "cvxpy.*",
-    "sec_edgar_downloader.*",
     "sklearn.*",
     "statsmodels.*",
+    "sentence_transformers.*",
 ]
 ignore_missing_imports = true
 

@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     CheckConstraint,
@@ -14,10 +15,13 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from quantagent.data.providers.embeddings import EMBEDDING_DIM
 
 TransactionSide = Literal["buy", "sell"]
 TRANSACTION_SIDES: tuple[TransactionSide, ...] = ("buy", "sell")
@@ -122,4 +126,83 @@ class Transaction(Base):
     __table_args__ = (
         CheckConstraint(_SIDE_CHECK_SQL, name="ck_transactions_side"),
         Index("ix_transactions_portfolio_id_trade_date", "portfolio_id", "trade_date"),
+    )
+
+
+class Filing(Base):
+    """A single SEC EDGAR filing (10-K/10-Q/8-K/...): public, tenant-agnostic.
+
+    No `tenant_id` column, and `FilingsRepository` does not inherit
+    `RepositoryBase` -- every SEC filing is identical for every tenant, so
+    there is no tenant-owning parent to join through (unlike `Holding`/
+    `Transaction`'s join to `Portfolio.tenant_id`). See `FilingsRepository`'s
+    own docstring for the full reasoning.
+    """
+
+    __tablename__ = "filings"
+
+    id: Mapped[str] = mapped_column(String(25), primary_key=True)  # == accession_no
+    cik: Mapped[str] = mapped_column(String(10), nullable=False)
+    ticker: Mapped[str] = mapped_column(String(16), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    form_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    filed_at: Mapped[date] = mapped_column(Date, nullable=False)
+    period_of_report: Mapped[date | None] = mapped_column(Date, nullable=True)
+    primary_document_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_tier: Mapped[str] = mapped_column(String(2), nullable=False, default="T1")
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    chunks: Mapped[list[FilingChunk]] = relationship(
+        back_populates="filing", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (Index("ix_filings_ticker_form_type", "ticker", "form_type", "filed_at"),)
+
+
+class FilingChunk(Base):
+    """One item-scoped, chunked passage of a `Filing`, with an optional
+    embedding vector.
+
+    `embedding` is nullable: rows are written at ingest time and vectors
+    backfilled independently, so a future embedding-model swap can
+    recompute vectors without re-chunking.
+
+    No `content_tsv` column here. The BM25 full-text index is a Postgres
+    *generated* column created directly by the Alembic migration (raw DDL),
+    deliberately NOT mapped as a SQLAlchemy attribute: mapping a
+    `to_tsvector(...)`-computed column here would put that Postgres-only
+    expression into `Base.metadata`, which every existing repository unit
+    test's `Base.metadata.create_all()` against sqlite would then try (and
+    fail) to compile -- sqlite has no `to_tsvector` function.
+    `FilingsRepository.search_bm25` reads that column through raw SQL
+    instead, and like `search_dense` (pgvector's `<=>` operator, also
+    unsupported by sqlite) is exercised only by the Postgres integration
+    tests, never the sqlite unit-test fixture.
+    """
+
+    __tablename__ = "filing_chunks"
+
+    chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    filing_id: Mapped[str] = mapped_column(
+        String(25), ForeignKey("filings.id", ondelete="CASCADE"), nullable=False
+    )
+    item: Mapped[str] = mapped_column(String(8), nullable=False)
+    section_path: Mapped[str] = mapped_column(String(200), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
+    char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    filing: Mapped[Filing] = relationship(back_populates="chunks")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "filing_id", "item", "chunk_index", name="uq_filing_chunks_filing_item_index"
+        ),
+        Index("ix_filing_chunks_filing_id", "filing_id"),
     )

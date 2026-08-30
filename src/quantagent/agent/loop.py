@@ -20,6 +20,7 @@ import structlog
 from anthropic import AsyncAnthropic
 
 from quantagent.agent.budget import RequestBudget
+from quantagent.agent.document_index import build_document_index
 from quantagent.agent.events import (
     DraftEvent,
     FinalEvent,
@@ -38,6 +39,11 @@ from quantagent.contracts.evidence import Evidence
 from quantagent.contracts.ledger import Ledger
 from quantagent.contracts.tools import PortfolioOutput
 from quantagent.contracts.verification import VerificationReport
+from quantagent.guardrails.inbound import run_inbound_checks
+from quantagent.guardrails.outbound import apply_disclosures, run_outbound_checks
+from quantagent.guardrails.refusals import build_outbound_block_answer
+from quantagent.guardrails.refusals import build_refusal_answer as build_guardrail_refusal_answer
+from quantagent.guardrails.types import GuardrailContext, InboundPayload, OutboundPayload
 from quantagent.llm.prompts import PromptLoader
 from quantagent.tools.context import ToolContext
 from quantagent.tools.registry import registry
@@ -103,6 +109,23 @@ async def _run_agent_loop_inner(
     prompts: PromptLoader,
     trace_id: str,
 ) -> AsyncIterator[LoopEvent]:
+    # ---- GUARDRAIL (INBOUND) ------------------------------------------
+    # Runs before anything else touches `question`, including the mandate
+    # fetch below: PII must be redacted before any LLM call sees it (I5).
+    guardrail_context = GuardrailContext(trace_id=trace_id, tenant_id=tenant_id)
+    inbound_decision, inbound_payload = run_inbound_checks(
+        InboundPayload(text=question, portfolio_id=portfolio_id), guardrail_context
+    )
+    if inbound_decision.action == "BLOCK":
+        logger.info(
+            "inbound_guardrail_blocked", trace_id=trace_id, category=inbound_decision.category
+        )
+        yield FinalEvent(
+            answer=build_guardrail_refusal_answer(trace_id=trace_id, decision=inbound_decision)
+        )
+        return
+    question = inbound_payload.text  # redacted; every downstream call sees this, never the original
+
     budget = RequestBudget.from_settings()
     mandate = await _load_mandate_context(ctx, portfolio_id)
 
@@ -129,7 +152,9 @@ async def _run_agent_loop_inner(
             )
             return
         plan: Plan = intent.direct_tool
-    else:  # PORTFOLIO_ANALYSIS
+    else:  # PORTFOLIO_ANALYSIS or RESEARCH -- identical DAG-planning path; see
+        # agent/intent.py's module docstring for why RESEARCH doesn't need
+        # its own branch here.
         plan, _plan_llm_calls = await create_plan(
             question, client=client, prompts=prompts, mandate_summary=mandate.summary
         )
@@ -171,6 +196,16 @@ async def _run_agent_loop_inner(
             reason="verification failed after the single permitted repair attempt",
             verification=verification,
         )
+
+    # ---- GUARDRAIL (OUTBOUND) ------------------------------------------
+    outbound_decision = run_outbound_checks(OutboundPayload(answer=answer), guardrail_context)
+    if outbound_decision.action == "BLOCK":
+        logger.warning(
+            "outbound_guardrail_blocked", trace_id=trace_id, category=outbound_decision.category
+        )
+        answer = build_outbound_block_answer(trace_id=trace_id, decision=outbound_decision)
+    else:
+        answer = apply_disclosures(answer)
     yield FinalEvent(answer=answer)
 
 
@@ -213,9 +248,19 @@ async def _synthesize_verify_repair(
         degraded=degraded,
         seeded_limitation=seeded_limitation,
     )
+    # Built once from the already-executed ledger, not by re-querying a live
+    # index (architecture.md §9.2 bit-for-bit replay; docs/PROGRESS.md's M5
+    # design) -- reused for both the initial and repair verification passes.
+    document_index = build_document_index(ledger)
+
     answer, _meta = await synthesize_answer(synth_input, client=client, prompts=prompts)
     answer, verification, results = await run_verification(
-        answer, ledger, client=client, prompts=prompts, mandate_constraints=mandate_constraints
+        answer,
+        ledger,
+        client=client,
+        prompts=prompts,
+        document_index=document_index,
+        mandate_constraints=mandate_constraints,
     )
     if verification.verdict != "FAIL":
         return answer, verification
@@ -225,7 +270,12 @@ async def _synthesize_verify_repair(
     )
     answer, _meta = await synthesize_answer(repair_input, client=client, prompts=prompts)
     answer, verification, _results = await run_verification(
-        answer, ledger, client=client, prompts=prompts, mandate_constraints=mandate_constraints
+        answer,
+        ledger,
+        client=client,
+        prompts=prompts,
+        document_index=document_index,
+        mandate_constraints=mandate_constraints,
     )
     verification = verification.model_copy(update={"repair_attempts": MAX_REPAIR_ATTEMPTS})
     answer = answer.model_copy(update={"verification": verification})
