@@ -3,7 +3,7 @@ from __future__ import annotations
 import quantagent.verify.verdict as verdict_module
 from quantagent.llm.prompts import PromptLoader
 from quantagent.verify.verdict import run_verification
-from tests.unit.llm.fixtures import build_mock_anthropic, tool_use_response
+from tests.unit.llm.fixtures import build_mock_llm_client, tool_use_response
 from tests.unit.verify.builders import build_answer, build_claim, build_evidence, build_ledger
 
 _OUTPUT_TOOL = "emit_structured_output"
@@ -41,16 +41,16 @@ async def test_v1_fail_short_circuits_v2_through_v5(monkeypatch) -> None:
 
     async def _fake_v5(*a, **k):
         calls["v5"] += 1
-        return []
+        return [], None
 
     monkeypatch.setattr(verdict_module, "run_v5_critique", _fake_v5)
 
     # A dangling evidence id -> V1 FAIL.
     claim = build_claim("c1", ["ev_missing"])
     answer = build_answer(claims=[claim], evidence=[])
-    client, _session = build_mock_anthropic([])
+    client, _session = build_mock_llm_client([])
 
-    _answer, report, _results = await run_verification(
+    _answer, report, _results, _verify_calls = await run_verification(
         answer, build_ledger(), client=client, prompts=PromptLoader()
     )
 
@@ -79,9 +79,9 @@ async def test_v4_warn_still_lets_v5_run() -> None:
         },
     )
     ledger = build_ledger(calls=[build_tool_call_record(status="DEGRADED")])
-    client, session = build_mock_anthropic([_supported_critic_response()])
+    client, session = build_mock_llm_client([_supported_critic_response()])
 
-    _answer, report, results = await run_verification(
+    _answer, report, results, _verify_calls = await run_verification(
         answer, ledger, client=client, prompts=PromptLoader()
     )
 
@@ -109,9 +109,9 @@ async def test_v4_fail_still_lets_v5_run() -> None:
             )
         },
     )
-    client, session = build_mock_anthropic([_supported_critic_response()])
+    client, session = build_mock_llm_client([_supported_critic_response()])
 
-    _answer, report, results = await run_verification(
+    _answer, report, results, _verify_calls = await run_verification(
         answer, build_ledger(), client=client, prompts=PromptLoader()
     )
 
@@ -136,9 +136,9 @@ async def test_clean_answer_passes_and_constraints_checked_is_overwritten() -> N
         },
         constraints_checked=[],  # synthesizer's own (empty) guess
     )
-    client, _session = build_mock_anthropic([_supported_critic_response()])
+    client, _session = build_mock_llm_client([_supported_critic_response()])
 
-    updated_answer, report, _results = await run_verification(
+    updated_answer, report, _results, _verify_calls = await run_verification(
         answer, build_ledger(), client=client, prompts=PromptLoader()
     )
 
@@ -152,9 +152,9 @@ async def test_zero_claims_answer_skips_v5_but_still_passes() -> None:
     # fixture -- that WARN would be real, correct R-007 behavior, just not
     # what this test is checking (V5 being skipped for a zero-claim answer).
     answer = build_answer(claims=[], evidence=[], decision="NO_ACTION")
-    client, session = build_mock_anthropic([])
+    client, session = build_mock_llm_client([])
 
-    _answer, report, _results = await run_verification(
+    _answer, report, _results, _verify_calls = await run_verification(
         answer, build_ledger(), client=client, prompts=PromptLoader()
     )
 

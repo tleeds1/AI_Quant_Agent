@@ -80,7 +80,7 @@ select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Header", "fastapi.Query"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true

@@ -96,13 +96,14 @@ def _verification(verdict: str = "PASS", *, repair_attempts: int = 0) -> Verific
 
 def _mock_run_verification(*results_and_verdicts: tuple[str, list[CheckResult]]) -> AsyncMock:
     """Builds an AsyncMock for `loop_module.run_verification` with one
-    `(answer, VerificationReport(verdict=...), check_results)` return per
+    `(answer, VerificationReport(verdict=...), check_results, llm_calls)` return per
     call, in order -- mirrors the real function's `(answer, report,
-    results)` tuple shape without invoking the real V1-V5 pipeline (that
+    results, llm_calls)` tuple shape without invoking the real V1-V5 pipeline (that
     pipeline has its own dedicated tests in tests/unit/verify/).
     """
     side_effects = [
-        (_answer(), _verification(verdict), results) for verdict, results in results_and_verdicts
+        (_answer(), _verification(verdict), results, [])
+        for verdict, results in results_and_verdicts
     ]
     return AsyncMock(side_effect=side_effects)
 

@@ -4,54 +4,104 @@ calling stage (INTAKE, PLAN, SYNTHESIZE) builds on (guideline.md §7:
 with Pydantic and retry once on validation failure with the validation error
 appended.").
 
-Verified against the installed `anthropic==1.0.0` SDK (not assumed from
-older tutorials, per this project's established discipline -- see the M2
-MCP-SDK precedent): tool-forcing via `tools`/`tool_choice={"type":"tool",
-"name":...}` is unchanged and used here. **`temperature` no longer exists
-anywhere in this SDK's request surface** (confirmed: zero references to
-"temperature" in the entire installed `anthropic` package) -- it has been
-replaced by `output_config.effort` (`"low"|"medium"|"high"|"xhigh"|"max"`),
-a reasoning-effort control, not a sampling-temperature one. guideline.md §7
-prescribes `temperature=0` for planning/verification/classification and
-`<=0.3` for synthesis; since no literal temperature knob is available
-against this SDK/API version, `get_structured_completion` keeps
-`temperature` as its own public parameter (so every call site -- INTAKE,
-PLAN, SYNTHESIZE -- keeps using the vocabulary guideline.md §7 specifies)
-and translates it internally to `effort` via `_effort_for_temperature`: this
-is a documented, flagged adaptation, not a silent guess, and it is
-inherently untestable against a live model in this environment (no real
-`ANTHROPIC_API_KEY` is configured) -- revisit if a future SDK reintroduces
-`temperature` or documents an official migration mapping.
+Talks to an OpenAI-Chat-Completions-compatible `/chat/completions` endpoint
+via plain httpx, not a vendor SDK -- this project points it at Open WebUI's
+proxy in front of the company's local models (config.py's
+`anthropic_base_url`/`anthropic_api_key`, see .env.example). Forces the
+target schema as a single named tool call via `tools`/`tool_choice`,
+matching guideline.md §7's structured-output policy without depending on any
+one vendor's tool-calling wire format. `temperature` is sent as-is: unlike
+Anthropic's Messages API (which has no `temperature` parameter, only a
+reasoning-effort control), the OpenAI-compatible surface accepts it
+directly, so no effort-mapping workaround is needed here.
+
+Smaller/local models don't always honor a forced `tool_choice` on a long
+generation -- observed live against `gemma4:26b`: the synthesis stage (a
+large prompt, a large output schema) came back with the answer as a
+```json ... ``` fenced code block in plain `content`, no `tool_calls` at
+all. `_extract_json_from_text` recovers that case rather than spend the one
+permitted retry on a request the model is just as likely to answer the same
+way again.
 """
 
 from __future__ import annotations
 
+import json
+import re
 import time
 from dataclasses import dataclass
-from typing import Any, Literal, TypeVar
+from typing import Any, TypeVar
 
+import httpx
 import structlog
-from anthropic import AsyncAnthropic
-from anthropic.types import (
-    Message,
-    MessageParam,
-    ToolChoiceToolParam,
-    ToolParam,
-    ToolResultBlockParam,
-    ToolUseBlock,
-)
-from anthropic.types.output_config_param import OutputConfigParam
 from pydantic import BaseModel, ValidationError
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
-from quantagent.contracts.errors import StructuredOutputError
+from quantagent.contracts.errors import LLMTransportError, StructuredOutputError
 from quantagent.llm.pricing import estimate_cost_usd
 
 logger = structlog.get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+MessageParam = dict[str, Any]
+
 _OUTPUT_TOOL_NAME = "emit_structured_output"
 _DEFAULT_MAX_TOKENS = 2048
+_HTTP_TIMEOUT_S = 60.0
+_MAX_ATTEMPTS = 3
+
+
+def _is_transient_http_error(exc: BaseException) -> bool:
+    """Only rate-limit (429) and server errors (5xx) are retried, mirroring
+    `data/providers/edgar.py`'s policy -- a 4xx other than 429 (bad request,
+    unauthorized, model not found) is permanent and retrying it would waste
+    the request budget on a call that can never succeed.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)
+
+
+class LLMClient:
+    """Thin async wrapper around an OpenAI-Chat-Completions-compatible
+    endpoint. `base_url` is the API root without a trailing
+    `/chat/completions` (this class appends it) -- e.g. Open WebUI's
+    `<host>/api`. Holds one long-lived `httpx.AsyncClient` for connection
+    reuse across the many calls a single request's INTAKE/PLAN/SYNTHESIZE
+    stages make, matching how the SDK client it replaces behaved. No I/O
+    happens at construction, only at the first call.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        # `transport` is test-only (tests inject an `httpx.MockTransport`);
+        # `None` is httpx's own default and constructs the real transport.
+        self._http = httpx.AsyncClient(
+            base_url=base_url.rstrip("/"),
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=_HTTP_TIMEOUT_S,
+            transport=transport,
+        )
+
+    async def close(self) -> None:
+        await self._http.aclose()
+
+    @retry(
+        retry=retry_if_exception(_is_transient_http_error),
+        wait=wait_exponential(multiplier=0.5, max=5),
+        stop=stop_after_attempt(_MAX_ATTEMPTS),
+        reraise=True,
+    )
+    async def post_chat_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self._http.post("/chat/completions", json=payload)
+        response.raise_for_status()
+        return dict(response.json())
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,27 +121,79 @@ class LLMCallMetadata:
     retried: bool
 
 
-def _effort_for_temperature(temperature: float) -> Literal["low", "medium", "high"]:
-    """See module docstring: the closest available analogue to guideline.md
-    §7's temperature policy against an SDK with no `temperature` parameter.
+@dataclass(frozen=True, slots=True)
+class _ToolCallResult:
+    tool_input: dict[str, Any] | None
+    tool_call_id: str | None
+    raw_assistant_message: dict[str, Any]
+    input_tokens: int
+    output_tokens: int
+
+
+def _tool_schema(output_schema: type[BaseModel]) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": _OUTPUT_TOOL_NAME,
+            "description": "Emit the final answer for this request as structured data.",
+            "parameters": output_schema.model_json_schema(),
+        },
+    }
+
+
+_JSON_CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
+
+
+def _extract_json_from_text(content: str) -> dict[str, Any] | None:
+    """Recovers a JSON object a model wrote as plain `content` instead of a
+    forced tool call (see module docstring) -- a fenced ```json ... ``` block
+    if present, otherwise the whole trimmed string. `None` if nothing in it
+    parses as a JSON object, so the caller falls through to its normal
+    "no tool call" failure path unchanged.
     """
-    if temperature <= 0.05:
-        return "high"
-    if temperature <= 0.3:
-        return "medium"
-    return "low"
+    if not content:
+        return None
+    match = _JSON_CODE_FENCE_RE.search(content)
+    candidate = match.group(1) if match else content.strip()
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
-def _tool_param(output_schema: type[BaseModel]) -> ToolParam:
-    return ToolParam(
-        name=_OUTPUT_TOOL_NAME,
-        description="Emit the final answer for this request as structured data.",
-        input_schema=output_schema.model_json_schema(),
+def _parse_response(payload: dict[str, Any]) -> _ToolCallResult:
+    choices = payload.get("choices") or []
+    message: dict[str, Any] = choices[0]["message"] if choices else {}
+
+    tool_input: dict[str, Any] | None = None
+    tool_call_id: str | None = None
+    for call in message.get("tool_calls") or []:
+        function = call.get("function", {})
+        if function.get("name") != _OUTPUT_TOOL_NAME:
+            continue
+        tool_call_id = call.get("id")
+        try:
+            tool_input = json.loads(function.get("arguments") or "")
+        except json.JSONDecodeError:
+            tool_input = None
+        break
+
+    if tool_input is None:
+        tool_input = _extract_json_from_text(message.get("content") or "")
+
+    usage = payload.get("usage") or {}
+    return _ToolCallResult(
+        tool_input=tool_input,
+        tool_call_id=tool_call_id,
+        raw_assistant_message=message,
+        input_tokens=int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0),
+        output_tokens=int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0),
     )
 
 
 async def _call(
-    client: AsyncAnthropic,
+    client: LLMClient,
     *,
     model: str,
     system: str,
@@ -99,27 +201,26 @@ async def _call(
     output_schema: type[BaseModel],
     temperature: float,
     max_tokens: int,
-) -> Message:
-    return await client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=messages,
-        tools=[_tool_param(output_schema)],
-        tool_choice=ToolChoiceToolParam(type="tool", name=_OUTPUT_TOOL_NAME),
-        output_config=OutputConfigParam(effort=_effort_for_temperature(temperature)),
-    )
-
-
-def _extract_tool_use_input(message: Message) -> dict[str, Any] | None:
-    for block in message.content:
-        if isinstance(block, ToolUseBlock) and block.name == _OUTPUT_TOOL_NAME:
-            return block.input
-    return None
+) -> _ToolCallResult:
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": [{"role": "system", "content": system}, *messages],
+        "tools": [_tool_schema(output_schema)],
+        "tool_choice": {"type": "function", "function": {"name": _OUTPUT_TOOL_NAME}},
+    }
+    try:
+        raw = await client.post_chat_completion(payload)
+    except httpx.HTTPError as exc:
+        raise LLMTransportError(
+            f"chat completion request failed for model={model!r}: {exc}"
+        ) from exc
+    return _parse_response(raw)
 
 
 async def get_structured_completion(
-    client: AsyncAnthropic,
+    client: LLMClient,
     *,
     model: str,
     system: str,
@@ -131,17 +232,16 @@ async def get_structured_completion(
 ) -> tuple[T, LLMCallMetadata]:
     """Forces `output_schema` as a single tool call, parses+validates the
     result with Pydantic, and retries exactly once on validation failure
-    (guideline.md §7) with the validation error appended as an
-    `is_error=True` tool_result turn. Raises `StructuredOutputError` if the
-    model never produces the forced tool_use block, or if the second
-    attempt also fails validation.
+    (guideline.md §7) with the validation error appended as a `role="tool"`
+    turn. Raises `StructuredOutputError` if the model never produces the
+    forced tool call, or if the second attempt also fails validation.
     """
     start = time.monotonic()
     total_input_tokens = 0
     total_output_tokens = 0
     retried = False
 
-    response = await _call(
+    result = await _call(
         client,
         model=model,
         system=system,
@@ -150,13 +250,12 @@ async def get_structured_completion(
         temperature=temperature,
         max_tokens=max_tokens,
     )
-    total_input_tokens += response.usage.input_tokens
-    total_output_tokens += response.usage.output_tokens
+    total_input_tokens += result.input_tokens
+    total_output_tokens += result.output_tokens
 
-    parsed, error = _try_parse(response, output_schema)
+    parsed, error = _try_parse(result, output_schema)
     if parsed is None:
         retried = True
-        tool_use_id = _tool_use_id(response)
         logger.info(
             "structured_output_retry",
             model=model,
@@ -165,21 +264,15 @@ async def get_structured_completion(
         )
         retry_messages: list[MessageParam] = [
             *messages,
-            {"role": "assistant", "content": response.content},
+            result.raw_assistant_message,
             {
-                "role": "user",
-                "content": [
-                    ToolResultBlockParam(
-                        type="tool_result",
-                        tool_use_id=tool_use_id,
-                        content=f"Validation failed: {error}. Correct the input and call "
-                        f"{_OUTPUT_TOOL_NAME} again with a schema-valid payload.",
-                        is_error=True,
-                    )
-                ],
+                "role": "tool",
+                "tool_call_id": result.tool_call_id or "missing_tool_call",
+                "content": f"Validation failed: {error}. Correct the input and call "
+                f"{_OUTPUT_TOOL_NAME} again with a schema-valid payload.",
             },
         ]
-        response = await _call(
+        result = await _call(
             client,
             model=model,
             system=system,
@@ -188,9 +281,9 @@ async def get_structured_completion(
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        total_input_tokens += response.usage.input_tokens
-        total_output_tokens += response.usage.output_tokens
-        parsed, error = _try_parse(response, output_schema)
+        total_input_tokens += result.input_tokens
+        total_output_tokens += result.output_tokens
+        parsed, error = _try_parse(result, output_schema)
         if parsed is None:
             raise StructuredOutputError(
                 f"model never produced a schema-valid {output_schema.__name__} for "
@@ -212,25 +305,10 @@ async def get_structured_completion(
     return parsed, metadata
 
 
-def _tool_use_id(response: Message) -> str:
-    for block in response.content:
-        if isinstance(block, ToolUseBlock) and block.name == _OUTPUT_TOOL_NAME:
-            return block.id
-    # Unreachable when `_try_parse` returned `None` for "no tool_use block
-    # found" -- but if the model stopped for another reason (e.g. it argued
-    # in plain text instead of calling the tool) there is no tool_use_id to
-    # respond to; the retry turn still needs a well-formed transcript, so
-    # fall back to a synthetic id the model has never seen. The provider
-    # will reject a genuinely mismatched tool_use_id, which surfaces as a
-    # second `StructuredOutputError` rather than a confusing lower-level one.
-    return "missing_tool_use"
-
-
-def _try_parse(response: Message, output_schema: type[T]) -> tuple[T | None, str | None]:
-    raw_input = _extract_tool_use_input(response)
-    if raw_input is None:
-        return None, f"no {_OUTPUT_TOOL_NAME!r} tool_use block in the response"
+def _try_parse(result: _ToolCallResult, output_schema: type[T]) -> tuple[T | None, str | None]:
+    if result.tool_input is None:
+        return None, f"no {_OUTPUT_TOOL_NAME!r} tool call in the response"
     try:
-        return output_schema.model_validate(raw_input), None
+        return output_schema.model_validate(result.tool_input), None
     except ValidationError as exc:
         return None, str(exc)

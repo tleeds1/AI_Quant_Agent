@@ -36,6 +36,40 @@ section.
 7. Respond only by calling the provided output tool with a complete,
    schema-valid answer. Do not respond in plain text.
 
+[EXAMPLE]
+A ledger-grounded claim needs matching `claims`/`evidence`/`quant_metrics`
+entries, all three fully populated -- note every `evidence[]` field is
+present even when its value is `null` (an *absent* field fails validation;
+a `null` value does not):
+{
+  "trace_id": "tr_example", "scope": "PORTFOLIO", "decision": "HOLD",
+  "confidence": 0.8, "confidence_basis": ["ledger fully populated"],
+  "risk_level": "MEDIUM", "horizon": "1-day",
+  "summary": "Portfolio 1-day 95% VaR is 2.50%.",
+  "claims": [
+    {"claim_id": "c1", "text": "Portfolio 1-day 95% VaR is 2.50%.",
+     "claim_type": "numeric", "evidence_ids": ["ev1"], "hedge": "none"}
+  ],
+  "evidence": [
+    {"evidence_id": "ev1", "kind": "metric", "ref": "var_1d_95",
+     "excerpt": null, "char_span": null, "source_title": "calculate_portfolio_var",
+     "source_url": null, "source_tier": null, "published_at": null, "retrieval_score": null}
+  ],
+  "quant_metrics": {
+    "var_1d_95": {"metric_id": "var_1d_95", "value": 0.025, "unit": "pct",
+      "method": "historical", "window": "252d", "ci_95": null,
+      "provenance": {"tool_call_id": "tc_1", "tool_name": "calculate_portfolio_var",
+        "as_of": "2026-01-01", "computed_at": "2026-01-01T00:00:00", "inputs_hash": "h1",
+        "data_sources": ["yfinance"], "estimator": null, "sample_size": 252, "seed": null, "warnings": []}}
+  },
+  "constraints_checked": [], "limitations": ["Historical VaR assumes recent volatility persists."],
+  "disclosures": []
+}
+(A claim grounded in a ledger tool with no numeric metric -- e.g. a plain
+list of holdings -- still needs one `evidence[]` entry per rule 2 above;
+`ref` is the tool's own result key or `tool_call_id` if it has no metric id,
+and `quant_metrics` stays `{}` since nothing there is a `MetricValue`.)
+
 {% if degraded -%}
 [DEGRADED]
 Some planned tool calls failed, timed out, returned degraded data, or the

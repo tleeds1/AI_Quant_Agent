@@ -15,9 +15,8 @@ must run concurrently; s4 fans back in.
 
 Real app, real SQLite-backed seeded portfolio, real tool/quant execution
 against monkeypatched provider network fetches (M1/M2's established
-pattern) -- only the Anthropic calls are mocked (via `httpx2.MockTransport`,
-see `tests/unit/llm/fixtures.py`; `respx` cannot mock this SDK, see the M3
-plan/memory note).
+pattern) -- only the LLM calls are mocked (via `httpx.MockTransport` injected
+into `LLMClient`, see `tests/unit/llm/fixtures.py`).
 """
 
 from __future__ import annotations
@@ -43,7 +42,7 @@ from quantagent.data.providers.prices import YFinancePriceProvider
 from quantagent.data.repositories.portfolio_repository import PortfolioRepository
 from quantagent.llm.prompts import PromptLoader
 from quantagent.tools.context import ToolContext
-from tests.unit.llm.fixtures import MockAnthropicSession, tool_use_response
+from tests.unit.llm.fixtures import MockLLMSession, tool_use_response
 
 PORTFOLIO_ID = "pf_e2e"
 TENANT_ID = "tenant_e2e"
@@ -267,7 +266,7 @@ class _E2EResources:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        anthropic_session: MockAnthropicSession,
+        anthropic_session: MockLLMSession,
     ) -> None:
         self.anthropic_client = anthropic_session.build_client()
         self.prompt_loader = PromptLoader()
@@ -312,7 +311,7 @@ def _run_and_collect(client: TestClient) -> list[dict[str, object]]:
 async def test_worked_example_runs_end_to_end(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    anthropic_session = MockAnthropicSession(
+    anthropic_session = MockLLMSession(
         [_intent_response(), _plan_response(), _synthesis_response(), _critic_supported_response()]
     )
     app = create_app()
@@ -354,7 +353,7 @@ async def test_worked_example_runs_end_to_end(
 async def test_worked_example_repair_path_fires_on_dangling_evidence(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    anthropic_session = MockAnthropicSession(
+    anthropic_session = MockLLMSession(
         [
             _intent_response(),
             _plan_response(),
@@ -394,7 +393,7 @@ async def test_worked_example_safe_fallback_on_repeated_verification_failure(
     hard-stop layer, so V2-V5 never run on either attempt -- no critic
     response is needed at all.
     """
-    anthropic_session = MockAnthropicSession(
+    anthropic_session = MockLLMSession(
         [
             _intent_response(),
             _plan_response(),

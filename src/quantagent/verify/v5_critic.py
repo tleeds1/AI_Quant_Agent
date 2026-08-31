@@ -23,13 +23,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, Field
 
 from quantagent.config import settings
 from quantagent.contracts.answer import AgentAnswer
 from quantagent.contracts.evidence import Evidence
-from quantagent.llm.client import get_structured_completion
+from quantagent.llm.client import LLMCallMetadata, LLMClient, get_structured_completion
 from quantagent.llm.prompts import PromptLoader
 from quantagent.verify.types import CheckResult, CheckVerdict
 
@@ -100,12 +99,12 @@ def _claim_rows(answer: AgentAnswer) -> list[dict[str, object]]:
 async def run_v5_critique(
     answer: AgentAnswer,
     *,
-    client: AsyncAnthropic,
+    client: LLMClient,
     prompts: PromptLoader,
     model: str | None = None,
-) -> list[CheckResult]:
+) -> tuple[list[CheckResult], LLMCallMetadata | None]:
     if not answer.claims:
-        return []
+        return [], None
 
     resolved_model = model or settings.model_critic
     rendered = prompts.render(PROMPT_STAGE, PROMPT_NAME, PROMPT_VERSION, claims=_claim_rows(answer))
@@ -123,7 +122,7 @@ async def run_v5_critique(
         prompt_version=rendered.version,
         temperature=CRITIC_TEMPERATURE,
     )
-    return _to_check_results(critique)
+    return _to_check_results(critique), _meta
 
 
 def _reduce_verdict(critic_verdict: _ClaimVerdictLiteral) -> CheckVerdict:

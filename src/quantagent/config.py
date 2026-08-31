@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     anthropic_api_key: str = ""
+    anthropic_base_url: str = ""
     market_data_provider: str = "yfinance"
     polygon_api_key: str = ""
     database_url: str = "postgresql+asyncpg://quant:quant@localhost:5432/quantagent"

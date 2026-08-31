@@ -6,7 +6,7 @@ from quantagent.agent.planner import PROMPT_STAGE, create_plan
 from quantagent.contracts.errors import ToolValidationError
 from quantagent.llm.prompts import PromptLoader
 from quantagent.tools.registry import registry
-from tests.unit.llm.fixtures import build_mock_anthropic, tool_use_response
+from tests.unit.llm.fixtures import build_mock_llm_client, tool_use_response
 
 _OUTPUT_TOOL = "emit_structured_output"
 
@@ -32,7 +32,9 @@ def _valid_plan_payload() -> dict[str, object]:
 
 
 async def test_create_plan_happy_path_single_call() -> None:
-    client, session = build_mock_anthropic([tool_use_response(_OUTPUT_TOOL, _valid_plan_payload())])
+    client, session = build_mock_llm_client(
+        [tool_use_response(_OUTPUT_TOOL, _valid_plan_payload())]
+    )
     prompts = PromptLoader()
 
     plan, metas = await create_plan(
@@ -50,7 +52,7 @@ async def test_create_plan_reprompts_once_on_semantically_invalid_plan() -> None
         "steps": [{"id": "s1", "tool": "not_a_real_tool", "args": {}, "depends_on": []}],
         "success_criteria": "x",
     }
-    client, session = build_mock_anthropic(
+    client, session = build_mock_llm_client(
         [
             tool_use_response(_OUTPUT_TOOL, invalid_payload),
             tool_use_response(_OUTPUT_TOOL, _valid_plan_payload()),
@@ -73,7 +75,7 @@ async def test_create_plan_raises_after_repair_still_invalid() -> None:
         "steps": [{"id": "s1", "tool": "not_a_real_tool", "args": {}, "depends_on": []}],
         "success_criteria": "x",
     }
-    client, session = build_mock_anthropic(
+    client, session = build_mock_llm_client(
         [
             tool_use_response(_OUTPUT_TOOL, invalid_payload),
             tool_use_response(_OUTPUT_TOOL, invalid_payload),

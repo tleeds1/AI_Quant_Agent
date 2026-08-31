@@ -1,4 +1,4 @@
-"""tests/unit/evals/fixtures.py -- hand-authored (Ledger, AgentAnswer-draft)
+"""evals/fixtures.py -- hand-authored (Ledger, AgentAnswer-draft)
 golden/flawed-answer pairs the M4 DoD is measured against (guideline.md's
 M4 DoD; architecture.md §10's "hallucination probes" / "golden set").
 
@@ -6,17 +6,14 @@ Each `GoldenFixture` is tagged with the layer/check_id that SHOULD catch it
 (or None for a clean-pass fixture) so tests/unit/evals/test_golden_set.py
 can assert "caught by the correct layer with the correct check" literally,
 not just "verdict == FAIL".
-
-Scope note (M4 plan §0.1): a full CI-wired eval scorecard under `evals/` is
-M6 scope (guideline.md's own M6 DoD: "all §10.4 gates wired into CI").
-These fixtures live under `tests/unit/evals/` instead, so they're actually
-exercised by the gate this project already trusts (`make check`).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+
+from tests.unit.llm.fixtures import tool_use_response
 
 from quantagent.contracts.answer import AgentAnswer, Decision, RiskLevel
 from quantagent.contracts.evidence import Claim, Evidence
@@ -25,7 +22,6 @@ from quantagent.contracts.metrics import MetricValue
 from quantagent.contracts.provenance import Provenance
 from quantagent.contracts.verification import VerificationReport
 from quantagent.verify.types import Layer
-from tests.unit.llm.fixtures import tool_use_response
 
 _OUTPUT_TOOL = "emit_structured_output"
 

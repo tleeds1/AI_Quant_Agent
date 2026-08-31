@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
-from anthropic import AsyncAnthropic
 
 from quantagent.agent.budget import RequestBudget
 from quantagent.agent.document_index import build_document_index
@@ -39,11 +38,13 @@ from quantagent.contracts.evidence import Evidence
 from quantagent.contracts.ledger import Ledger
 from quantagent.contracts.tools import PortfolioOutput
 from quantagent.contracts.verification import VerificationReport
+from quantagent.data.repositories.trace_repository import TraceRepository
 from quantagent.guardrails.inbound import run_inbound_checks
 from quantagent.guardrails.outbound import apply_disclosures, run_outbound_checks
 from quantagent.guardrails.refusals import build_outbound_block_answer
 from quantagent.guardrails.refusals import build_refusal_answer as build_guardrail_refusal_answer
 from quantagent.guardrails.types import GuardrailContext, InboundPayload, OutboundPayload
+from quantagent.llm.client import LLMCallMetadata, LLMClient
 from quantagent.llm.prompts import PromptLoader
 from quantagent.tools.context import ToolContext
 from quantagent.tools.registry import registry
@@ -73,7 +74,7 @@ async def run_agent_loop(
     tenant_id: str,
     portfolio_id: str | None,
     ctx: ToolContext,
-    client: AsyncAnthropic,
+    client: LLMClient,
     prompts: PromptLoader,
     trace_id: str,
 ) -> AsyncIterator[LoopEvent]:
@@ -105,10 +106,13 @@ async def _run_agent_loop_inner(
     tenant_id: str,
     portfolio_id: str | None,
     ctx: ToolContext,
-    client: AsyncAnthropic,
+    client: LLMClient,
     prompts: PromptLoader,
     trace_id: str,
 ) -> AsyncIterator[LoopEvent]:
+    # Collect all LLM calls
+    trace_llm_calls: list[LLMCallMetadata] = []
+
     # ---- GUARDRAIL (INBOUND) ------------------------------------------
     # Runs before anything else touches `question`, including the mandate
     # fetch below: PII must be redacted before any LLM call sees it (I5).
@@ -120,9 +124,18 @@ async def _run_agent_loop_inner(
         logger.info(
             "inbound_guardrail_blocked", trace_id=trace_id, category=inbound_decision.category
         )
-        yield FinalEvent(
-            answer=build_guardrail_refusal_answer(trace_id=trace_id, decision=inbound_decision)
+        answer = build_guardrail_refusal_answer(trace_id=trace_id, decision=inbound_decision)
+        await _persist_trace(
+            ctx,
+            trace_id=trace_id,
+            tenant_id=tenant_id,
+            question=question,
+            portfolio_id=portfolio_id,
+            answer=answer,
+            guardrail_decisions={"inbound": inbound_decision.model_dump(mode="json")},
+            llm_calls=[],
         )
+        yield FinalEvent(answer=answer)
         return
     question = inbound_payload.text  # redacted; every downstream call sees this, never the original
 
@@ -133,31 +146,55 @@ async def _run_agent_loop_inner(
     intent = await classify_intent(
         question, client=client, prompts=prompts, mandate_summary=mandate.summary
     )
+    trace_llm_calls.append(intent.llm_call)
     logger.info(
         "intake_complete", trace_id=trace_id, label=intent.label, confidence=intent.confidence
     )
 
     if intent.label == "OUT_OF_SCOPE":
-        yield FinalEvent(answer=_build_refusal_answer(trace_id=trace_id, intent=intent))
+        answer = _build_refusal_answer(trace_id=trace_id, intent=intent)
+        await _persist_trace(
+            ctx,
+            trace_id=trace_id,
+            tenant_id=tenant_id,
+            question=question,
+            portfolio_id=portfolio_id,
+            intent=intent,
+            answer=answer,
+            guardrail_decisions={"inbound": inbound_decision.model_dump(mode="json")},
+            llm_calls=trace_llm_calls,
+        )
+        yield FinalEvent(answer=answer)
         return
 
     # ---- PLAN / DIRECT_TOOL --------------------------------------------
     if intent.label == "SIMPLE_LOOKUP":
         if intent.direct_tool is None:
             logger.error("simple_lookup_missing_direct_tool", trace_id=trace_id)
-            yield FinalEvent(
-                answer=build_unrecoverable_error_answer(
-                    trace_id, reason="intent classifier returned SIMPLE_LOOKUP with no direct_tool"
-                )
+            answer = build_unrecoverable_error_answer(
+                trace_id, reason="intent classifier returned SIMPLE_LOOKUP with no direct_tool"
             )
+            await _persist_trace(
+                ctx,
+                trace_id=trace_id,
+                tenant_id=tenant_id,
+                question=question,
+                portfolio_id=portfolio_id,
+                intent=intent,
+                answer=answer,
+                guardrail_decisions={"inbound": inbound_decision.model_dump(mode="json")},
+                llm_calls=trace_llm_calls,
+            )
+            yield FinalEvent(answer=answer)
             return
         plan: Plan = intent.direct_tool
     else:  # PORTFOLIO_ANALYSIS or RESEARCH -- identical DAG-planning path; see
         # agent/intent.py's module docstring for why RESEARCH doesn't need
         # its own branch here.
-        plan, _plan_llm_calls = await create_plan(
+        plan, plan_calls = await create_plan(
             question, client=client, prompts=prompts, mandate_summary=mandate.summary
         )
+        trace_llm_calls.extend(plan_calls)
 
     yield PlanEvent(steps=[step.model_dump(mode="json") for step in plan.steps])
 
@@ -170,7 +207,7 @@ async def _run_agent_loop_inner(
     degraded, seeded_limitation = _classify_degradation(execution)
 
     # ---- SYNTHESIZE + VERIFY + REPAIR (x1) --------------------------------
-    answer, verification = await _synthesize_verify_repair(
+    answer, verification, synth_llm_calls = await _synthesize_verify_repair(
         question=question,
         trace_id=trace_id,
         ledger=execution.ledger,
@@ -181,6 +218,8 @@ async def _run_agent_loop_inner(
         client=client,
         prompts=prompts,
     )
+    trace_llm_calls.extend(synth_llm_calls)
+
     yield DraftEvent(answer=answer)
     yield VerdictEvent(
         verdict=verification.verdict,
@@ -206,6 +245,25 @@ async def _run_agent_loop_inner(
         answer = build_outbound_block_answer(trace_id=trace_id, decision=outbound_decision)
     else:
         answer = apply_disclosures(answer)
+
+    # Save trace to database
+    await _persist_trace(
+        ctx,
+        trace_id=trace_id,
+        tenant_id=tenant_id,
+        question=question,
+        portfolio_id=portfolio_id,
+        intent=intent,
+        plan=plan,
+        ledger=execution.ledger,
+        answer=answer,
+        verification=verification,
+        guardrail_decisions={
+            "inbound": inbound_decision.model_dump(mode="json"),
+            "outbound": outbound_decision.model_dump(mode="json"),
+        },
+        llm_calls=trace_llm_calls,
+    )
     yield FinalEvent(answer=answer)
 
 
@@ -237,9 +295,11 @@ async def _synthesize_verify_repair(
     mandate_constraints: dict[str, Any] | None,
     degraded: bool,
     seeded_limitation: str | None,
-    client: AsyncAnthropic,
+    client: LLMClient,
     prompts: PromptLoader,
-) -> tuple[AgentAnswer, VerificationReport]:
+) -> tuple[AgentAnswer, VerificationReport, list[LLMCallMetadata]]:
+    llm_calls: list[LLMCallMetadata] = []
+
     synth_input = SynthesisInput(
         question=question,
         trace_id=trace_id,
@@ -253,8 +313,10 @@ async def _synthesize_verify_repair(
     # design) -- reused for both the initial and repair verification passes.
     document_index = build_document_index(ledger)
 
-    answer, _meta = await synthesize_answer(synth_input, client=client, prompts=prompts)
-    answer, verification, results = await run_verification(
+    answer, meta = await synthesize_answer(synth_input, client=client, prompts=prompts)
+    llm_calls.append(meta)
+
+    answer, verification, results, verify_calls = await run_verification(
         answer,
         ledger,
         client=client,
@@ -262,14 +324,18 @@ async def _synthesize_verify_repair(
         document_index=document_index,
         mandate_constraints=mandate_constraints,
     )
+    llm_calls.extend(verify_calls)
+
     if verification.verdict != "FAIL":
-        return answer, verification
+        return answer, verification, llm_calls
 
     repair_input = synth_input.model_copy(
         update={"repair_feedback": _describe_verification_failure(results)}
     )
-    answer, _meta = await synthesize_answer(repair_input, client=client, prompts=prompts)
-    answer, verification, _results = await run_verification(
+    answer, repair_meta = await synthesize_answer(repair_input, client=client, prompts=prompts)
+    llm_calls.append(repair_meta)
+
+    answer, verification, _results, repair_verify_calls = await run_verification(
         answer,
         ledger,
         client=client,
@@ -277,9 +343,91 @@ async def _synthesize_verify_repair(
         document_index=document_index,
         mandate_constraints=mandate_constraints,
     )
+    llm_calls.extend(repair_verify_calls)
+
     verification = verification.model_copy(update={"repair_attempts": MAX_REPAIR_ATTEMPTS})
     answer = answer.model_copy(update={"verification": verification})
-    return answer, verification
+    return answer, verification, llm_calls
+
+
+async def _persist_trace(
+    ctx: ToolContext,
+    *,
+    trace_id: str,
+    tenant_id: str,
+    question: str,
+    portfolio_id: str | None = None,
+    intent: IntentResult | None = None,
+    plan: Plan | None = None,
+    ledger: Ledger | None = None,
+    answer: AgentAnswer | None = None,
+    verification: VerificationReport | None = None,
+    guardrail_decisions: dict[str, Any] | None = None,
+    llm_calls: list[LLMCallMetadata] | None = None,
+) -> None:
+    try:
+        if not hasattr(ctx, "portfolios"):
+            return
+        # Convert LLMCallMetadata and other objects to dicts
+        llm_calls_dump = [
+            {
+                "model": c.model,
+                "prompt_version": c.prompt_version,
+                "input_tokens": c.input_tokens,
+                "output_tokens": c.output_tokens,
+                "latency_ms": c.latency_ms,
+                "cost_usd": c.cost_usd,
+                "retried": c.retried,
+            }
+            for c in (llm_calls or [])
+        ]
+        plan_dump = [step.model_dump(mode="json") for step in plan.steps] if plan else None
+        ledger_dump = ledger.model_dump(mode="json") if ledger else None
+        answer_dump = answer.model_dump(mode="json") if answer else None
+        verification_dump = verification.model_dump(mode="json") if verification else None
+
+        traces_repo = TraceRepository(ctx.portfolios._session_factory)
+        await traces_repo.save_trace(
+            trace_id=trace_id,
+            tenant_id=tenant_id,
+            question=question,
+            portfolio_id=portfolio_id,
+            intent_label=intent.label if intent else None,
+            intent_confidence=intent.confidence if intent else None,
+            intent_rationale=intent.rationale if intent else None,
+            plan=plan_dump,
+            ledger=ledger_dump,
+            answer=answer_dump,
+            verification_report=verification_dump,
+            guardrail_decisions=guardrail_decisions,
+            llm_calls=llm_calls_dump,
+        )
+
+        # Write audit log if we have a released answer
+        if answer is not None:
+            # Extract data sources and their as_of from ledger
+            data_sources = {}
+            if ledger:
+                for call in ledger.calls:
+                    if call.status in ("OK", "CACHED") and call.result:
+                        prov = call.result.get("provenance", {})
+                        as_of = prov.get("as_of")
+                        sources = prov.get("data_sources", [])
+                        for src in sources:
+                            data_sources[src] = as_of
+
+            await traces_repo.save_audit_log(
+                trace_id=trace_id,
+                tenant_id=tenant_id,
+                question=question,
+                data_sources=data_sources,
+                recommendation=answer.decision,
+                summary=answer.summary,
+                verifier_verdict=verification.verdict if verification else "PASS",
+                released_by="agent",
+            )
+    except Exception as e:
+        logger.exception("failed_to_persist_trace_or_audit", trace_id=trace_id, error=str(e))
 
 
 def _describe_verification_failure(results: list[CheckResult]) -> str:

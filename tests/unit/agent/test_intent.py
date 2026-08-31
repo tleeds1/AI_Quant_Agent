@@ -3,14 +3,14 @@ from __future__ import annotations
 from quantagent.agent.intent import classify_intent
 from quantagent.llm.prompts import PromptLoader
 from quantagent.tools.registry import registry
-from tests.unit.llm.fixtures import build_mock_anthropic, tool_use_response
+from tests.unit.llm.fixtures import build_mock_llm_client, tool_use_response
 
 _OUTPUT_TOOL = "emit_structured_output"
 
 
 async def test_out_of_scope_has_no_direct_tool() -> None:
     payload = {"label": "OUT_OF_SCOPE", "confidence": 0.95, "rationale": "not finance-related"}
-    client, _session = build_mock_anthropic([tool_use_response(_OUTPUT_TOOL, payload)])
+    client, _session = build_mock_llm_client([tool_use_response(_OUTPUT_TOOL, payload)])
 
     result = await classify_intent(
         "what's the weather today?", client=client, prompts=PromptLoader(), registry=registry
@@ -26,7 +26,7 @@ async def test_portfolio_analysis_has_no_direct_tool() -> None:
         "confidence": 0.8,
         "rationale": "needs multi-step analysis",
     }
-    client, _session = build_mock_anthropic([tool_use_response(_OUTPUT_TOOL, payload)])
+    client, _session = build_mock_llm_client([tool_use_response(_OUTPUT_TOOL, payload)])
 
     result = await classify_intent(
         "why did my drawdown spike last month?",
@@ -45,7 +45,7 @@ async def test_research_has_no_direct_tool() -> None:
         "confidence": 0.85,
         "rationale": "company-research question, no portfolio data needed",
     }
-    client, _session = build_mock_anthropic([tool_use_response(_OUTPUT_TOOL, payload)])
+    client, _session = build_mock_llm_client([tool_use_response(_OUTPUT_TOOL, payload)])
 
     result = await classify_intent(
         "what does NVDA's 10-K say about supply-chain risk?",
@@ -65,7 +65,7 @@ async def test_simple_lookup_with_valid_tool_resolves_to_one_step_plan() -> None
         "rationale": "single tool answers this",
         "direct_tool": {"tool_name": "get_holdings", "args": {"portfolio_id": "pf_1"}},
     }
-    client, session = build_mock_anthropic([tool_use_response(_OUTPUT_TOOL, payload)])
+    client, session = build_mock_llm_client([tool_use_response(_OUTPUT_TOOL, payload)])
 
     result = await classify_intent(
         "what are my current holdings?", client=client, prompts=PromptLoader(), registry=registry
@@ -93,7 +93,7 @@ async def test_simple_lookup_with_invalid_args_downgrades_to_portfolio_analysis(
             "args": {"portfolio_id": "pf_1", "alpha": 5.0},
         },
     }
-    client, session = build_mock_anthropic([tool_use_response(_OUTPUT_TOOL, invalid_args_payload)])
+    client, session = build_mock_llm_client([tool_use_response(_OUTPUT_TOOL, invalid_args_payload)])
 
     result = await classify_intent(
         "what's my VaR?", client=client, prompts=PromptLoader(), registry=registry
@@ -107,7 +107,7 @@ async def test_simple_lookup_with_invalid_args_downgrades_to_portfolio_analysis(
 
 async def test_mandate_summary_none_renders_without_error() -> None:
     payload = {"label": "OUT_OF_SCOPE", "confidence": 0.5, "rationale": "x"}
-    client, _session = build_mock_anthropic([tool_use_response(_OUTPUT_TOOL, payload)])
+    client, _session = build_mock_llm_client([tool_use_response(_OUTPUT_TOOL, payload)])
 
     result = await classify_intent(
         "hello", client=client, prompts=PromptLoader(), mandate_summary=None, registry=registry

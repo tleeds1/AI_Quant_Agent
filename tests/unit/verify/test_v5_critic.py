@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from quantagent.llm.prompts import PromptLoader
 from quantagent.verify.v5_critic import run_v5_critique
-from tests.unit.llm.fixtures import build_mock_anthropic, tool_use_response
+from tests.unit.llm.fixtures import build_mock_llm_client, tool_use_response
 from tests.unit.verify.builders import build_answer, build_claim, build_evidence
 
 _OUTPUT_TOOL = "emit_structured_output"
 
 
 async def test_empty_claims_skips_without_any_llm_call() -> None:
-    client, session = build_mock_anthropic([])
+    client, session = build_mock_llm_client([])
     answer = build_answer(claims=[], evidence=[])
 
-    results = await run_v5_critique(answer, client=client, prompts=PromptLoader())
+    results, _meta = await run_v5_critique(answer, client=client, prompts=PromptLoader())
 
     assert results == []
     assert session.call_count == 0
@@ -29,7 +29,7 @@ async def test_prompt_excludes_summary_decision_and_confidence() -> None:
         decision="BUY",
         confidence=0.987654,
     )
-    client, session = build_mock_anthropic(
+    client, session = build_mock_llm_client(
         [
             tool_use_response(
                 _OUTPUT_TOOL,
@@ -48,10 +48,11 @@ async def test_prompt_excludes_summary_decision_and_confidence() -> None:
         ]
     )
 
-    await run_v5_critique(answer, client=client, prompts=prompts)
+    _, _ = await run_v5_critique(answer, client=client, prompts=prompts)
 
     body = session.request_body(0)
-    system_text = body["system"]
+    system_text = body["messages"][0]["content"]
+    assert body["messages"][0]["role"] == "system"
     assert "THIS_SECRET_SUMMARY_MUST_NOT_LEAK" not in system_text
     assert "0.987654" not in system_text
     assert '"decision"' not in system_text.lower()
@@ -62,7 +63,7 @@ async def test_contradiction_produces_two_check_results_sharing_message_content(
     claim2 = build_claim("c2", ["ev1"], text="VaR is 4.0%.")
     evidence = build_evidence("ev1", kind="metric")
     answer = build_answer(claims=[claim1, claim2], evidence=[evidence])
-    client, _session = build_mock_anthropic(
+    client, _session = build_mock_llm_client(
         [
             tool_use_response(
                 _OUTPUT_TOOL,
@@ -93,7 +94,7 @@ async def test_contradiction_produces_two_check_results_sharing_message_content(
         ]
     )
 
-    results = await run_v5_critique(answer, client=client, prompts=PromptLoader())
+    results, _meta = await run_v5_critique(answer, client=client, prompts=PromptLoader())
 
     contradiction_results = [r for r in results if r.check_id == "v5.contradiction"]
     assert len(contradiction_results) == 1
@@ -105,7 +106,7 @@ async def test_single_llm_call_regardless_of_claim_count() -> None:
     claims = [build_claim(f"c{i}", ["ev1"], text=f"claim {i}") for i in range(3)]
     evidence = build_evidence("ev1", kind="metric")
     answer = build_answer(claims=claims, evidence=[evidence])
-    client, session = build_mock_anthropic(
+    client, session = build_mock_llm_client(
         [
             tool_use_response(
                 _OUTPUT_TOOL,
@@ -125,7 +126,7 @@ async def test_single_llm_call_regardless_of_claim_count() -> None:
         ]
     )
 
-    await run_v5_critique(answer, client=client, prompts=PromptLoader())
+    _, _ = await run_v5_critique(answer, client=client, prompts=PromptLoader())
 
     assert session.call_count == 1
 
@@ -135,7 +136,7 @@ async def test_partially_supported_maps_to_warn_unsupported_maps_to_fail() -> No
     claim2 = build_claim("c2", ["ev1"], text="y")
     evidence = build_evidence("ev1", kind="metric")
     answer = build_answer(claims=[claim1, claim2], evidence=[evidence])
-    client, _session = build_mock_anthropic(
+    client, _session = build_mock_llm_client(
         [
             tool_use_response(
                 _OUTPUT_TOOL,
@@ -160,7 +161,7 @@ async def test_partially_supported_maps_to_warn_unsupported_maps_to_fail() -> No
         ]
     )
 
-    results = await run_v5_critique(answer, client=client, prompts=PromptLoader())
+    results, _meta = await run_v5_critique(answer, client=client, prompts=PromptLoader())
 
     by_claim = {r.claim_id: r.verdict for r in results}
     assert by_claim["c1"] == "WARN"

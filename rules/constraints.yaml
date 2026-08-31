@@ -85,12 +85,9 @@ rules:
 
   - id: R-009
     description: >-
-      NOT IMPLEMENTED. A single-name SELL/BUY should have
-      simulate_trade_impact present in the ledger. simulate_trade_impact is
-      an M7 portfolio-optimizer tool that does not exist yet. Registered as
-      an always-NOT_APPLICABLE stub, same rationale as R-005.
-    action: not_applicable
-    severity: WARN
+      A single-name SELL/BUY should have simulate_trade_impact present in the ledger
+    action: block
+    severity: BREACH
     params: {}
 
   - id: R-010

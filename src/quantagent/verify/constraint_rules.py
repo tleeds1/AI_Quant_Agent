@@ -439,13 +439,26 @@ def _predicate_r008(ctx: RuleContext) -> tuple[CheckResult, ConstraintCheck]:
 
 
 def _predicate_r009(ctx: RuleContext) -> tuple[CheckResult, ConstraintCheck]:
+    if ctx.answer.decision not in ("BUY", "SELL"):
+        return _make_result(
+            ctx.spec,
+            verdict="PASS",
+            message=f"decision is {ctx.answer.decision}; simulate_trade_impact not required.",
+        )
+    has_simulated = any(
+        c.tool_name == "simulate_trade_impact" and c.status in ("OK", "CACHED")
+        for c in ctx.ledger.calls
+    )
+    if has_simulated:
+        return _make_result(
+            ctx.spec,
+            verdict="PASS",
+            message="simulate_trade_impact tool called successfully.",
+        )
     return _make_result(
         ctx.spec,
-        verdict="NOT_APPLICABLE",
-        message=(
-            "simulate_trade_impact (M7 portfolio-optimizer scope) does not exist yet; "
-            "cannot fire."
-        ),
+        verdict="FAIL",
+        message="decision is BUY or SELL, but simulate_trade_impact was not successfully called.",
     )
 
 

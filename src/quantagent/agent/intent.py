@@ -21,12 +21,11 @@ from __future__ import annotations
 from typing import Any, Literal
 
 import structlog
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, Field, model_validator
 
 from quantagent.agent.planner import Plan, PlanStep, validate_plan
 from quantagent.config import settings
-from quantagent.llm.client import LLMCallMetadata, get_structured_completion
+from quantagent.llm.client import LLMCallMetadata, LLMClient, get_structured_completion
 from quantagent.llm.prompts import PromptLoader
 from quantagent.tools.registry import ToolRegistry
 from quantagent.tools.registry import registry as tools_registry
@@ -87,7 +86,7 @@ class IntentResult(BaseModel):
 async def classify_intent(
     question: str,
     *,
-    client: AsyncAnthropic,
+    client: LLMClient,
     prompts: PromptLoader,
     mandate_summary: str | None = None,
     model: str | None = None,

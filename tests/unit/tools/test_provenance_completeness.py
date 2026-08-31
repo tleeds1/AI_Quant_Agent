@@ -33,6 +33,14 @@ _MINIMAL_VALID_ARGS: dict[str, dict[str, Any]] = {
     "calculate_tracking_error": {"portfolio_id": DEFAULT_PORTFOLIO_ID},
     "compute_expression": {"expr": "a + b", "refs": {"a": 1.0, "b": 2.0}},
     "generate_risk_report": {"portfolio_id": DEFAULT_PORTFOLIO_ID},
+    "optimize_portfolio": {
+        "portfolio_id": DEFAULT_PORTFOLIO_ID,
+        "objective": "min_variance",
+    },
+    "simulate_trade_impact": {
+        "portfolio_id": DEFAULT_PORTFOLIO_ID,
+        "target_weights": {"AAA": 0.5, "BBB": 0.5},
+    },
     "retrieve_company_filings": {"ticker": "AAA", "query": "test research question"},
     "retrieve_filing_section": {
         "ticker": "AAA",

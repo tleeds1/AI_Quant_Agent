@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from evals.fixtures import GoldenFixture
+
 from quantagent.contracts.answer import AgentAnswer
 from quantagent.contracts.verification import VerificationReport
 from quantagent.llm.prompts import PromptLoader
 from quantagent.verify.types import CheckResult
 from quantagent.verify.verdict import run_verification
-from tests.unit.evals.fixtures import GoldenFixture
-from tests.unit.llm.fixtures import build_mock_anthropic
+from tests.unit.llm.fixtures import build_mock_llm_client
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,8 +27,8 @@ class FixtureRun:
 
 
 async def run_fixture(fixture: GoldenFixture, *, prompts: PromptLoader) -> FixtureRun:
-    client, _session = build_mock_anthropic(fixture.critic_responses or [])
-    answer, report, results = await run_verification(
+    client, _session = build_mock_llm_client(fixture.critic_responses or [])
+    answer, report, results, _verify_calls = await run_verification(
         fixture.answer, fixture.ledger, client=client, prompts=prompts
     )
     return FixtureRun(fixture=fixture, answer=answer, report=report, results=results)

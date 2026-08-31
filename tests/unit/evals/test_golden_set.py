@@ -7,12 +7,7 @@ the safe-fallback path is both reachable and alerted.
 
 from __future__ import annotations
 
-import quantagent.agent.loop as loop_module
-from quantagent.agent.loop import _build_safe_fallback_answer
-from quantagent.contracts.ledger import Ledger
-from quantagent.llm.prompts import PromptLoader
-from quantagent.verify.numeric_grounding import hallucinated_number_rate
-from tests.unit.evals.fixtures import (
+from evals.fixtures import (
     FIXTURE_CLEAN_PASS,
     FIXTURE_CONTRADICTORY_CLAIMS,
     FIXTURE_DANGLING_EVIDENCE,
@@ -23,6 +18,12 @@ from tests.unit.evals.fixtures import (
     FIXTURE_UNSUPPORTED_CLAIM,
     GOLDEN_FIXTURES,
 )
+
+import quantagent.agent.loop as loop_module
+from quantagent.agent.loop import _build_safe_fallback_answer
+from quantagent.contracts.ledger import Ledger
+from quantagent.llm.prompts import PromptLoader
+from quantagent.verify.numeric_grounding import hallucinated_number_rate
 from tests.unit.evals.harness import precision_recall, run_fixture
 
 _PROMPTS = PromptLoader()
@@ -117,8 +118,9 @@ async def test_partially_supported_is_advisory_unsupported_is_blocking() -> None
     ALWAYS treats UNSUPPORTED/CONTRADICTED as blocking, by construction,
     regardless of any measured rate.
     """
+    from evals.fixtures import GoldenFixture, _base_answer, _clean_ledger, _evidence
+
     from quantagent.contracts.evidence import Claim
-    from tests.unit.evals.fixtures import GoldenFixture, _base_answer, _clean_ledger, _evidence
     from tests.unit.llm.fixtures import tool_use_response
 
     partially_supported_fixture = GoldenFixture(

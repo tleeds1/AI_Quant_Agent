@@ -162,6 +162,34 @@ _ARGS_BY_TOOL = {
     "calculate_tracking_error": {"portfolio_id": PORTFOLIO_ID, "lookback_days": 400},
     "compute_expression": {"expr": "a / b - 1", "refs": {"a": 1.05, "b": 1.0}},
     "generate_risk_report": {"portfolio_id": PORTFOLIO_ID, "lookback_days": 400},
+    # Added when this test first ran against real Docker infra (previously
+    # written but never executed, per docs/PROGRESS.md's disclosed gap) --
+    # these 6 tools (M5's RAG + M6/M7's optimizer/research stubs) postdate
+    # the original `_ARGS_BY_TOOL` and had never been exercised here.
+    "optimize_portfolio": {"portfolio_id": PORTFOLIO_ID, "objective": "min_variance"},
+    "simulate_trade_impact": {
+        "portfolio_id": PORTFOLIO_ID,
+        "target_weights": {"AAPL": 0.34, "MSFT": 0.33, "NVDA": 0.33},
+    },
+    # ctx.retrieval is left unset below (no filing chunks are seeded here --
+    # this test is about registry/DB/provider wiring, not RAG quality), so
+    # these two exercise the real, documented "RAG not configured" fallback
+    # path in tools/research.py rather than a real HybridRetriever search.
+    "retrieve_company_filings": {"ticker": "AAPL", "query": "revenue growth risk factors"},
+    "retrieve_filing_section": {
+        "ticker": "AAPL",
+        "form": "10-K",
+        "section": "item_1a",
+        "query": "risk factors",
+    },
+    # Permanently-degraded stubs (no data source configured) -- always
+    # return an empty result, never raise.
+    "search_recent_news": {"tickers": TICKERS},
+    "get_earnings_transcript_snippets": {
+        "ticker": "AAPL",
+        "quarters": ["2024Q4"],
+        "query": "revenue guidance",
+    },
 }
 
 

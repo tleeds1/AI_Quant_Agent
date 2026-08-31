@@ -1,0 +1,625 @@
+{
+  "timestamp": "2026-08-31T15:30:54.163026",
+  "summary": {
+    "total_fixtures": 8,
+    "precision": 1.0,
+    "recall": 1.0,
+    "citation_precision": 1.0,
+    "citation_recall": 1.0,
+    "citation_fixtures": 5
+  },
+  "fixtures": [
+    {
+      "name": "clean_pass",
+      "expected_verdict": "PASS",
+      "actual_verdict": "PASS",
+      "expected_layer": null,
+      "matched": true,
+      "results_summary": [
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "PASS",
+          "message": "claim c1: all evidence_ids resolve"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.metric_ref_resolution",
+          "verdict": "PASS",
+          "message": "evidence ev1: ref 'portfolio_var' resolves"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.decision_scope",
+          "verdict": "PASS",
+          "message": "decision 'HOLD' is allowed for scope 'PORTFOLIO'"
+        },
+        {
+          "layer": "V2",
+          "check_id": "v2.numeric_grounding",
+          "verdict": "PASS",
+          "message": "allowlisted (analysis window length): '504'"
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-001",
+          "verdict": "PASS",
+          "message": "risk_level/decision combination is consistent."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-002",
+          "verdict": "PASS",
+          "message": "decision is not BUY; rule not triggered."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-003",
+          "verdict": "PASS",
+          "message": "confidence at or below threshold."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-004",
+          "verdict": "PASS",
+          "message": "no 'max_var_pct' in mandate_constraints; nothing to breach."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-005",
+          "verdict": "PASS",
+          "message": "theme taxonomy / get_theme_exposure does not exist yet; structurally cannot fire."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-006",
+          "verdict": "PASS",
+          "message": "every causal claim has >=1 T1/T2 evidence."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-007",
+          "verdict": "PASS",
+          "message": "fresh metrics within 3 trading days: ['portfolio_var']."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-008",
+          "verdict": "PASS",
+          "message": "no prohibited certainty language found."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-009",
+          "verdict": "PASS",
+          "message": "decision is HOLD; simulate_trade_impact not required."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-010",
+          "verdict": "PASS",
+          "message": "confidence at or above threshold."
+        },
+        {
+          "layer": "V5",
+          "check_id": "v5.entailment",
+          "verdict": "PASS",
+          "message": "[SUPPORTED/low] Evidence directly states the VaR figure claimed."
+        }
+      ]
+    },
+    {
+      "name": "hallucinated_number",
+      "expected_verdict": "FAIL",
+      "actual_verdict": "FAIL",
+      "expected_layer": "V2",
+      "matched": true,
+      "results_summary": [
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "PASS",
+          "message": "claim c1: all evidence_ids resolve"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.metric_ref_resolution",
+          "verdict": "PASS",
+          "message": "evidence ev1: ref 'portfolio_var' resolves"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.decision_scope",
+          "verdict": "PASS",
+          "message": "decision 'HOLD' is allowed for scope 'PORTFOLIO'"
+        },
+        {
+          "layer": "V2",
+          "check_id": "v2.numeric_grounding",
+          "verdict": "FAIL",
+          "message": "'1.8' in summary does not match any ledger value within tolerance; nearest is tc_1.result.value"
+        },
+        {
+          "layer": "V2",
+          "check_id": "v2.numeric_grounding",
+          "verdict": "FAIL",
+          "message": "'1.8' in claims[c1].text does not match any ledger value within tolerance; nearest is tc_1.result.value"
+        },
+        {
+          "layer": "V2",
+          "check_id": "v2.numeric_grounding",
+          "verdict": "PASS",
+          "message": "allowlisted (analysis window length): '504'"
+        }
+      ]
+    },
+    {
+      "name": "dangling_evidence_id",
+      "expected_verdict": "FAIL",
+      "actual_verdict": "FAIL",
+      "expected_layer": "V1",
+      "matched": true,
+      "results_summary": [
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "FAIL",
+          "message": "claim c1 references unresolved evidence_ids: ['ev_missing']"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.metric_ref_resolution",
+          "verdict": "PASS",
+          "message": "evidence ev1: ref 'portfolio_var' resolves"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.decision_scope",
+          "verdict": "PASS",
+          "message": "decision 'HOLD' is allowed for scope 'PORTFOLIO'"
+        }
+      ]
+    },
+    {
+      "name": "unresolved_metric_ref",
+      "expected_verdict": "FAIL",
+      "actual_verdict": "FAIL",
+      "expected_layer": "V1",
+      "matched": true,
+      "results_summary": [
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "PASS",
+          "message": "claim c1: all evidence_ids resolve"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.metric_ref_resolution",
+          "verdict": "FAIL",
+          "message": "evidence ev1 has kind='metric' but ref 'metric_that_does_not_exist' is not a key in quant_metrics (['portfolio_var'])"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.decision_scope",
+          "verdict": "PASS",
+          "message": "decision 'HOLD' is allowed for scope 'PORTFOLIO'"
+        }
+      ]
+    },
+    {
+      "name": "r001_extreme_risk_buy",
+      "expected_verdict": "FAIL",
+      "actual_verdict": "FAIL",
+      "expected_layer": "V4",
+      "matched": true,
+      "results_summary": [
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "PASS",
+          "message": "claim c1: all evidence_ids resolve"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.metric_ref_resolution",
+          "verdict": "PASS",
+          "message": "evidence ev1: ref 'portfolio_var' resolves"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.decision_scope",
+          "verdict": "PASS",
+          "message": "decision 'BUY' is allowed for scope 'PORTFOLIO'"
+        },
+        {
+          "layer": "V2",
+          "check_id": "v2.numeric_grounding",
+          "verdict": "PASS",
+          "message": "allowlisted (analysis window length): '504'"
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-001",
+          "verdict": "FAIL",
+          "message": "EXTREME risk_level with a BUY decision."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-002",
+          "verdict": "PASS",
+          "message": "no 'max_concentration_pct' in mandate_constraints; nothing to breach."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-003",
+          "verdict": "PASS",
+          "message": "confidence at or below threshold."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-004",
+          "verdict": "PASS",
+          "message": "no 'max_var_pct' in mandate_constraints; nothing to breach."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-005",
+          "verdict": "PASS",
+          "message": "theme taxonomy / get_theme_exposure does not exist yet; structurally cannot fire."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-006",
+          "verdict": "PASS",
+          "message": "every causal claim has >=1 T1/T2 evidence."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-007",
+          "verdict": "PASS",
+          "message": "fresh metrics within 3 trading days: ['portfolio_var']."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-008",
+          "verdict": "PASS",
+          "message": "no prohibited certainty language found."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-009",
+          "verdict": "FAIL",
+          "message": "decision is BUY or SELL, but simulate_trade_impact was not successfully called."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-010",
+          "verdict": "PASS",
+          "message": "confidence at or above threshold."
+        },
+        {
+          "layer": "V5",
+          "check_id": "v5.entailment",
+          "verdict": "PASS",
+          "message": "[SUPPORTED/low] Evidence directly states the VaR figure claimed."
+        }
+      ]
+    },
+    {
+      "name": "r008_guaranteed_language",
+      "expected_verdict": "FAIL",
+      "actual_verdict": "FAIL",
+      "expected_layer": "V4",
+      "matched": true,
+      "results_summary": [
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "PASS",
+          "message": "claim c1: all evidence_ids resolve"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.metric_ref_resolution",
+          "verdict": "PASS",
+          "message": "evidence ev1: ref 'portfolio_var' resolves"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.decision_scope",
+          "verdict": "PASS",
+          "message": "decision 'HOLD' is allowed for scope 'PORTFOLIO'"
+        },
+        {
+          "layer": "V2",
+          "check_id": "v2.numeric_grounding",
+          "verdict": "PASS",
+          "message": "allowlisted (analysis window length): '504'"
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-001",
+          "verdict": "PASS",
+          "message": "risk_level/decision combination is consistent."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-002",
+          "verdict": "PASS",
+          "message": "decision is not BUY; rule not triggered."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-003",
+          "verdict": "PASS",
+          "message": "confidence at or below threshold."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-004",
+          "verdict": "PASS",
+          "message": "no 'max_var_pct' in mandate_constraints; nothing to breach."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-005",
+          "verdict": "PASS",
+          "message": "theme taxonomy / get_theme_exposure does not exist yet; structurally cannot fire."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-006",
+          "verdict": "PASS",
+          "message": "every causal claim has >=1 T1/T2 evidence."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-007",
+          "verdict": "PASS",
+          "message": "fresh metrics within 3 trading days: ['portfolio_var']."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-008",
+          "verdict": "FAIL",
+          "message": "prohibited certainty language found: ['guarantee', 'guaranteed']."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-009",
+          "verdict": "PASS",
+          "message": "decision is HOLD; simulate_trade_impact not required."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-010",
+          "verdict": "PASS",
+          "message": "confidence at or above threshold."
+        },
+        {
+          "layer": "V5",
+          "check_id": "v5.entailment",
+          "verdict": "PASS",
+          "message": "[SUPPORTED/low] Evidence directly states the VaR figure claimed."
+        }
+      ]
+    },
+    {
+      "name": "unsupported_claim",
+      "expected_verdict": "FAIL",
+      "actual_verdict": "FAIL",
+      "expected_layer": "V5",
+      "matched": true,
+      "results_summary": [
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "PASS",
+          "message": "claim c1: all evidence_ids resolve"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.metric_ref_resolution",
+          "verdict": "PASS",
+          "message": "evidence ev1: ref 'portfolio_var' resolves"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.decision_scope",
+          "verdict": "PASS",
+          "message": "decision 'HOLD' is allowed for scope 'PORTFOLIO'"
+        },
+        {
+          "layer": "V2",
+          "check_id": "v2.numeric_grounding",
+          "verdict": "PASS",
+          "message": "allowlisted (analysis window length): '504'"
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-001",
+          "verdict": "PASS",
+          "message": "risk_level/decision combination is consistent."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-002",
+          "verdict": "PASS",
+          "message": "decision is not BUY; rule not triggered."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-003",
+          "verdict": "PASS",
+          "message": "confidence at or below threshold."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-004",
+          "verdict": "PASS",
+          "message": "no 'max_var_pct' in mandate_constraints; nothing to breach."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-005",
+          "verdict": "PASS",
+          "message": "theme taxonomy / get_theme_exposure does not exist yet; structurally cannot fire."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-006",
+          "verdict": "PASS",
+          "message": "every causal claim has >=1 T1/T2 evidence."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-007",
+          "verdict": "PASS",
+          "message": "fresh metrics within 3 trading days: ['portfolio_var']."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-008",
+          "verdict": "PASS",
+          "message": "no prohibited certainty language found."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-009",
+          "verdict": "PASS",
+          "message": "decision is HOLD; simulate_trade_impact not required."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-010",
+          "verdict": "PASS",
+          "message": "confidence at or above threshold."
+        },
+        {
+          "layer": "V5",
+          "check_id": "v5.entailment",
+          "verdict": "FAIL",
+          "message": "[UNSUPPORTED/high] The linked evidence does not contain a VaR figure at all."
+        }
+      ]
+    },
+    {
+      "name": "contradictory_claims",
+      "expected_verdict": "FAIL",
+      "actual_verdict": "FAIL",
+      "expected_layer": "V5",
+      "matched": true,
+      "results_summary": [
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "PASS",
+          "message": "claim c1: all evidence_ids resolve"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.evidence_resolution",
+          "verdict": "PASS",
+          "message": "claim c2: all evidence_ids resolve"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.metric_ref_resolution",
+          "verdict": "PASS",
+          "message": "evidence ev1: ref 'portfolio_var' resolves"
+        },
+        {
+          "layer": "V1",
+          "check_id": "v1.decision_scope",
+          "verdict": "PASS",
+          "message": "decision 'HOLD' is allowed for scope 'PORTFOLIO'"
+        },
+        {
+          "layer": "V2",
+          "check_id": "v2.numeric_grounding",
+          "verdict": "PASS",
+          "message": "allowlisted (analysis window length): '504'"
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-001",
+          "verdict": "PASS",
+          "message": "risk_level/decision combination is consistent."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-002",
+          "verdict": "PASS",
+          "message": "decision is not BUY; rule not triggered."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-003",
+          "verdict": "PASS",
+          "message": "confidence at or below threshold."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-004",
+          "verdict": "PASS",
+          "message": "no 'max_var_pct' in mandate_constraints; nothing to breach."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-005",
+          "verdict": "PASS",
+          "message": "theme taxonomy / get_theme_exposure does not exist yet; structurally cannot fire."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-006",
+          "verdict": "PASS",
+          "message": "every causal claim has >=1 T1/T2 evidence."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-007",
+          "verdict": "PASS",
+          "message": "fresh metrics within 3 trading days: ['portfolio_var']."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-008",
+          "verdict": "PASS",
+          "message": "no prohibited certainty language found."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-009",
+          "verdict": "PASS",
+          "message": "decision is HOLD; simulate_trade_impact not required."
+        },
+        {
+          "layer": "V4",
+          "check_id": "R-010",
+          "verdict": "PASS",
+          "message": "confidence at or above threshold."
+        },
+        {
+          "layer": "V5",
+          "check_id": "v5.entailment",
+          "verdict": "PASS",
+          "message": "[SUPPORTED/low] matches ledger"
+        },
+        {
+          "layer": "V5",
+          "check_id": "v5.entailment",
+          "verdict": "PASS",
+          "message": "[SUPPORTED/low] presented as if separately supported"
+        },
+        {
+          "layer": "V5",
+          "check_id": "v5.contradiction",
+          "verdict": "FAIL",
+          "message": "[CONTRADICTION/high] claims ['c1', 'c2'] contradict each other: c1 states VaR is stable and c2 states VaR has spiked for the same portfolio and window -- these cannot both be true."
+        }
+      ]
+    }
+  ]
+}

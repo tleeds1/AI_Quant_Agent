@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from anthropic import AsyncAnthropic
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -18,6 +17,7 @@ from quantagent.data.providers.factors import KenFrenchFactorDataProvider
 from quantagent.data.providers.fundamentals import YFinanceFundamentalsProvider
 from quantagent.data.providers.prices import YFinancePriceProvider
 from quantagent.data.repositories.portfolio_repository import PortfolioRepository
+from quantagent.llm.client import LLMClient
 from quantagent.llm.prompts import PromptLoader
 from quantagent.rag.retrieval import HybridRetriever
 from quantagent.tools.context import ToolContext
@@ -28,7 +28,7 @@ class AppResources:
     engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     cache: CacheClient
-    anthropic_client: AsyncAnthropic
+    anthropic_client: LLMClient
     prompt_loader: PromptLoader
     # Built once in api/app.py's lifespan (like every field above) and
     # shared across every request -- NOT rebuilt per `tool_context()` call.

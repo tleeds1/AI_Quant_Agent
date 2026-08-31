@@ -206,3 +206,50 @@ class FilingChunk(Base):
         ),
         Index("ix_filing_chunks_filing_id", "filing_id"),
     )
+
+
+class Trace(Base):
+    """Persisted trace of a user query execution (architecture.md §9.1).
+    Contains metadata and JSON dumps of intake, planner, ledger, verifications,
+    and LLM calls to allow full auditability and nightly reproducibility replay.
+    """
+
+    __tablename__ = "traces"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    portfolio_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    intent_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    intent_confidence: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
+    intent_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    ledger: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    answer: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    verification_report: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    guardrail_decisions: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    llm_calls: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_traces_tenant_id_created_at", "tenant_id", "created_at"),)
+
+
+class AuditLogEntry(Base):
+    """Tamper-evident, hash-chained audit log of released answers (architecture.md §9.5)."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    data_sources: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    recommendation: Mapped[str] = mapped_column(String(50), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    verifier_verdict: Mapped[str] = mapped_column(String(32), nullable=False)
+    released_by: Mapped[str] = mapped_column(String(32), nullable=False)
+    previous_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_audit_log_tenant_id_created_at", "tenant_id", "created_at"),)

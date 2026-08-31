@@ -13,7 +13,7 @@ from quantagent.agent.synthesizer import (
 from quantagent.contracts.answer import AgentAnswer
 from quantagent.contracts.ledger import Ledger, ToolCallRecord
 from quantagent.llm.prompts import PromptLoader
-from tests.unit.llm.fixtures import build_mock_anthropic, tool_use_response
+from tests.unit.llm.fixtures import build_mock_llm_client, tool_use_response
 
 _OUTPUT_TOOL = "emit_structured_output"
 
@@ -85,7 +85,7 @@ def _ledger() -> Ledger:
 
 
 async def test_synthesize_answer_happy_path() -> None:
-    client, session = build_mock_anthropic(
+    client, session = build_mock_llm_client(
         [tool_use_response(_OUTPUT_TOOL, _valid_draft_payload())]
     )
     inp = SynthesisInput(question="what's my VaR?", trace_id="tr_1", ledger=_ledger())
@@ -103,7 +103,7 @@ async def test_synthesize_answer_happy_path() -> None:
 
 async def test_synthesize_answer_retries_on_validation_failure() -> None:
     bad_payload = _valid_draft_payload(confidence="not-a-float")
-    client, session = build_mock_anthropic(
+    client, session = build_mock_llm_client(
         [
             tool_use_response(_OUTPUT_TOOL, bad_payload),
             tool_use_response(_OUTPUT_TOOL, _valid_draft_payload()),

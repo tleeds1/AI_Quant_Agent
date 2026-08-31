@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, Field
 
 from quantagent.config import settings
@@ -22,7 +21,7 @@ from quantagent.contracts.ledger import Ledger
 from quantagent.contracts.metrics import MetricValue
 from quantagent.contracts.tools import RETRIEVE_COMPANY_FILINGS, RETRIEVE_FILING_SECTION
 from quantagent.contracts.verification import ConstraintCheck, VerificationReport
-from quantagent.llm.client import LLMCallMetadata, get_structured_completion
+from quantagent.llm.client import LLMCallMetadata, LLMClient, get_structured_completion
 from quantagent.llm.prompts import PromptLoader
 
 # Tool calls whose ledger `result` carries retrieved chunk text -- excluded
@@ -79,7 +78,7 @@ class _DraftAnswer(BaseModel):
 
 
 async def synthesize_answer(
-    inp: SynthesisInput, *, client: AsyncAnthropic, prompts: PromptLoader, model: str | None = None
+    inp: SynthesisInput, *, client: LLMClient, prompts: PromptLoader, model: str | None = None
 ) -> tuple[AgentAnswer, LLMCallMetadata]:
     resolved_model = model or settings.model_synthesizer
     rendered = prompts.render(

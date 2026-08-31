@@ -28,8 +28,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from anthropic import AsyncAnthropic
-
 from quantagent.contracts.answer import AgentAnswer
 from quantagent.contracts.ledger import Ledger
 from quantagent.contracts.verification import (
@@ -37,6 +35,7 @@ from quantagent.contracts.verification import (
     VerificationReport,
     VerificationVerdict,
 )
+from quantagent.llm.client import LLMCallMetadata, LLMClient
 from quantagent.llm.prompts import PromptLoader
 from quantagent.verify.citation import DocumentIndex, run_v3_checks
 from quantagent.verify.constraint_rules import run_v4_checks
@@ -50,44 +49,53 @@ async def run_verification(
     answer: AgentAnswer,
     ledger: Ledger,
     *,
-    client: AsyncAnthropic,
+    client: LLMClient,
     prompts: PromptLoader,
     document_index: DocumentIndex | None = None,
     mandate_constraints: dict[str, Any] | None = None,
     critic_model: str | None = None,
-) -> tuple[AgentAnswer, VerificationReport, list[CheckResult]]:
+) -> tuple[AgentAnswer, VerificationReport, list[CheckResult], list[LLMCallMetadata]]:
     """Returns `(answer_with_constraints_checked_and_limitations_updated,
-    report, all_check_results)`. `all_check_results` is the raw, layer-
+    report, all_check_results, llm_calls)`. `all_check_results` is the raw, layer-
     tagged material `agent/loop.py::_describe_verification_failure` formats
     into the repair-prompt's structured critique -- this function only
     judges, it never formats prompt text (single responsibility).
     """
     results: list[CheckResult] = []
+    llm_calls: list[LLMCallMetadata] = []
 
     v1_results = run_v1_checks(answer)
     results.extend(v1_results)
     if _has_fail(v1_results):
-        return _finalize(answer, results, constraint_checks=[])
+        ans, report, res = _finalize(answer, results, constraint_checks=[])
+        return ans, report, res, llm_calls
 
     v2_results = run_v2_numeric_grounding(answer, ledger)
     results.extend(v2_results)
     if _has_fail(v2_results):
-        return _finalize(answer, results, constraint_checks=[])
+        ans, report, res = _finalize(answer, results, constraint_checks=[])
+        return ans, report, res, llm_calls
 
     v3_results = run_v3_checks(answer, document_index=document_index)
     results.extend(v3_results)
     if _has_fail(v3_results):
-        return _finalize(answer, results, constraint_checks=[])
+        ans, report, res = _finalize(answer, results, constraint_checks=[])
+        return ans, report, res, llm_calls
 
     v4_results, constraint_checks = run_v4_checks(
         answer, ledger, mandate_constraints=mandate_constraints
     )
     results.extend(v4_results)
 
-    v5_results = await run_v5_critique(answer, client=client, prompts=prompts, model=critic_model)
+    v5_results, critic_meta = await run_v5_critique(
+        answer, client=client, prompts=prompts, model=critic_model
+    )
     results.extend(v5_results)
+    if critic_meta is not None:
+        llm_calls.append(critic_meta)
 
-    return _finalize(answer, results, constraint_checks=constraint_checks)
+    ans, report, res = _finalize(answer, results, constraint_checks=constraint_checks)
+    return ans, report, res, llm_calls
 
 
 def _has_fail(results: list[CheckResult]) -> bool:

@@ -477,3 +477,56 @@ class GetEarningsTranscriptSnippetsOutput(BaseModel):
     ticker: str
     chunks: list[RetrievedFilingChunk] = Field(default_factory=list)
     provenance: Provenance
+
+
+# --------------------------------------------------------------- optimization (M7) --
+
+
+class OptimizePortfolioInput(BaseModel):
+    portfolio_id: str
+    objective: Literal["min_variance", "max_utility", "risk_parity"]
+    max_turnover: float | None = Field(None, ge=0.0, le=2.0)
+    max_concentration: float | None = Field(None, ge=0.0, le=1.0)
+    risk_aversion: float = Field(2.0, ge=0.1, le=100.0)
+    target_return: float | None = Field(None, ge=-1.0, le=1.0)
+    as_of: date | None = None
+
+
+class RebalanceTrade(BaseModel):
+    ticker: str
+    current_weight: float
+    target_weight: float
+    weight_delta: float
+    action: Literal["BUY", "SELL", "HOLD"]
+    trade_value_usd: float
+    trade_quantity: float
+
+
+class OptimizePortfolioOutput(BaseModel):
+    portfolio_id: str
+    objective: str
+    as_of: date
+    current_expected_return: MetricValue
+    current_volatility: MetricValue
+    current_sharpe: MetricValue
+    target_expected_return: MetricValue
+    target_volatility: MetricValue
+    target_sharpe: MetricValue
+    ex_ante_delta_risk: MetricValue
+    trades: list[RebalanceTrade]
+    provenance: Provenance
+
+
+class SimulateTradeImpactInput(BaseModel):
+    portfolio_id: str
+    target_weights: dict[str, float]
+    as_of: date | None = None
+
+
+class SimulateTradeImpactOutput(BaseModel):
+    portfolio_id: str
+    as_of: date
+    total_trade_value_usd: MetricValue
+    estimated_cost_usd: MetricValue
+    turnover_pct: MetricValue
+    provenance: Provenance

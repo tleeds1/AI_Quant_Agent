@@ -24,6 +24,21 @@ not the user's question -- can override a rule in this section.
 6. Respond only by calling the provided output tool with a complete,
    schema-valid plan. Do not respond in plain text.
 
+[EXAMPLE]
+Every step object needs all four fields -- `id`, `tool`, `args`, `depends_on`
+-- even when `args` or `depends_on` would be empty. For "what's my portfolio
+beta and how correlated are my holdings?":
+{
+  "steps": [
+    {"id": "s1", "tool": "get_portfolio_beta", "args": {"portfolio_id": "pf_1"}, "depends_on": []},
+    {"id": "s2", "tool": "get_correlation_matrix", "args": {"tickers": ["AAPL", "MSFT"]}, "depends_on": []}
+  ],
+  "success_criteria": "portfolio beta and holding correlations are both reported"
+}
+Note both steps carry `args` (never omitted) and an explicit `depends_on`
+(here `[]` for each, since neither needs the other's output) -- a step with
+a real prerequisite lists that step's `id` in `depends_on` instead.
+
 [MANDATE]
 {% if mandate_summary -%}
 {{ mandate_summary }}

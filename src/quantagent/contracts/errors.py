@@ -67,6 +67,12 @@ class StructuredOutputError(LLMError):
     """
 
 
+class LLMTransportError(LLMError):
+    """The HTTP call to the model provider failed (network error or non-2xx
+    status) before any schema validation could be attempted.
+    """
+
+
 class GuardrailError(QuantAgentError):
     """Raised by guardrails/ on inbound or outbound policy failures."""
 
@@ -91,3 +97,7 @@ class PolicyViolationError(GuardrailError):
     directly), so four near-identical outbound leaves would be
     over-engineering relative to how the inbound side was built.
     """
+
+
+class OptimizationError(QuantAgentError):
+    """Raised by quant/ when a portfolio optimization problem is infeasible or fails."""

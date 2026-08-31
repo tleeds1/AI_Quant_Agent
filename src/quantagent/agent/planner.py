@@ -13,12 +13,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, ValidationError
 
 from quantagent.config import settings
 from quantagent.contracts.errors import ToolValidationError
-from quantagent.llm.client import LLMCallMetadata, get_structured_completion
+from quantagent.llm.client import LLMCallMetadata, LLMClient, get_structured_completion
 from quantagent.llm.prompts import PromptLoader
 from quantagent.tools.registry import ToolRegistry
 from quantagent.tools.registry import registry as tools_registry
@@ -229,7 +228,7 @@ def _critical_path_ms(plan: Plan, registry: ToolRegistry) -> int:
 async def create_plan(
     question: str,
     *,
-    client: AsyncAnthropic,
+    client: LLMClient,
     prompts: PromptLoader,
     mandate_summary: str | None = None,
     model: str | None = None,

@@ -136,16 +136,36 @@ def test_r004_missing_mandate_key_is_pass_not_fail_or_unknown() -> None:
     assert _cc(checks, "R-004").status == "PASS"
 
 
-def test_r005_and_r009_always_not_applicable() -> None:
+def test_r005_always_not_applicable() -> None:
     ledger = build_ledger()
-    # Fixture content that WOULD trigger them if implemented -- proves the
-    # stub genuinely never fires regardless of input.
     answer = build_answer(decision="BUY", risk_level="EXTREME")
     results, checks = run_v4_checks(answer, ledger)
     assert _result(results, "R-005").verdict == "PASS"
     assert _cc(checks, "R-005").status == "NOT_APPLICABLE"
+
+
+def test_r009_pass_and_breach() -> None:
+    # 1. No BUY/SELL decision -> PASS
+    ledger_empty = build_ledger()
+    no_trade = build_answer(decision="NO_ACTION")
+    results, checks = run_v4_checks(no_trade, ledger_empty)
     assert _result(results, "R-009").verdict == "PASS"
-    assert _cc(checks, "R-009").status == "NOT_APPLICABLE"
+    assert _cc(checks, "R-009").status == "PASS"
+
+    # 2. BUY decision but no simulation -> FAIL / BREACH
+    trade_no_sim = build_answer(decision="BUY")
+    results, checks = run_v4_checks(trade_no_sim, ledger_empty)
+    assert _result(results, "R-009").verdict == "FAIL"
+    assert _cc(checks, "R-009").status == "BREACH"
+
+    # 3. BUY decision with successful simulation -> PASS
+    ledger_sim = build_ledger(
+        calls=[build_tool_call_record(tool_name="simulate_trade_impact", status="OK")]
+    )
+    trade_with_sim = build_answer(decision="BUY")
+    results, checks = run_v4_checks(trade_with_sim, ledger_sim)
+    assert _result(results, "R-009").verdict == "PASS"
+    assert _cc(checks, "R-009").status == "PASS"
 
 
 def test_r006_pass_and_breach() -> None:

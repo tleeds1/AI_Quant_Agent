@@ -1,3 +1,4 @@
+from quantagent.contracts.errors import OptimizationError
 from quantagent.quant import (
     beta,
     calendar,
@@ -7,11 +8,13 @@ from quantagent.quant import (
     cvar,
     drawdown,
     factors,
+    optimization,
     returns,
     stress,
     tracking_error,
     var,
 )
+from quantagent.quant.optimization import optimize_portfolio
 from quantagent.quant.types import (
     ComponentResult,
     ConcentrationResult,
@@ -29,6 +32,7 @@ __all__ = [
     "CovarianceResult",
     "DrawdownResult",
     "FactorExposureResult",
+    "OptimizationError",
     "QuantResult",
     "ScalarResult",
     "TailRiskResult",
@@ -40,6 +44,8 @@ __all__ = [
     "cvar",
     "drawdown",
     "factors",
+    "optimization",
+    "optimize_portfolio",
     "returns",
     "stress",
     "tracking_error",
